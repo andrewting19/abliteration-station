@@ -111,6 +111,7 @@ class BenchmarkTest(unittest.TestCase):
         summary = PROXY_SUMMARY.summarize(records, 0.36)
         self.assertEqual(summary["decode_tps_token_weighted"], 100)
         self.assertEqual(summary["wake_seconds_median"], 40)
+        self.assertIsNone(summary["draft_acceptance_rate"])
         self.assertGreater(summary["measured_request_compute_usd"], 0)
 
 

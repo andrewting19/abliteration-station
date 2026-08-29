@@ -44,6 +44,8 @@ def summarize(records: list[dict[str, Any]], hourly_rate: float) -> dict[str, An
     ttft = [float(item["first_response_byte_seconds"]) for item in records if isinstance(item.get("first_response_byte_seconds"), (int, float))]
     wakes = [float(item["wake_seconds"]) for item in records if isinstance(item.get("wake_seconds"), (int, float))]
     completion_tokens = sum(int((item.get("usage") or {}).get("completion_tokens") or 0) for item in records)
+    drafted_tokens = sum(int((item.get("timings") or {}).get("draft_n") or 0) for item in records)
+    accepted_tokens = sum(int((item.get("timings") or {}).get("draft_n_accepted") or 0) for item in records)
     measured_seconds = sum(totals)
     return {
         "requests": len(records),
@@ -57,6 +59,9 @@ def summarize(records: list[dict[str, Any]], hourly_rate: float) -> dict[str, An
         "prompt_tps_token_weighted": weighted_rate(records, "prompt_n", "prompt_per_second"),
         "decode_tps_token_weighted": weighted_rate(records, "predicted_n", "predicted_per_second"),
         "completion_tokens": completion_tokens,
+        "drafted_tokens": drafted_tokens,
+        "accepted_tokens": accepted_tokens,
+        "draft_acceptance_rate": accepted_tokens / drafted_tokens if drafted_tokens else None,
         "measured_request_compute_usd": measured_seconds * hourly_rate / 3600,
         "usd_per_million_output_tokens": (
             measured_seconds * hourly_rate / 3600 * 1_000_000 / completion_tokens
