@@ -1,0 +1,144 @@
+# Qwen Cloud Lifecycle
+
+Qwen Cloud Lifecycle gives [Pi](https://github.com/earendil-works/pi) a private,
+OpenAI-compatible Qwen model on a rented Vast.ai GPU. It starts compute on
+demand, keeps an open Pi session usable after idle shutdown, and stops paid GPU
+compute after ten minutes without an inference request.
+
+Version 0.1 is an alpha release. It supports one tested deployment profile:
+
+- Qwen3.8-27B Unleashed `Q3_K_XL`;
+- Qwen3.8-27B DFlash2 `Q4_0` draft decoding;
+- one RTX 5090;
+- 262,144 tokens of context;
+- native medium thinking and temperature 1.0;
+- a private Tailscale route;
+- Vast.ai as the compute provider.
+
+The repository does not contain model weights, credentials, Pi transcripts, or
+Tailscale state. The installer downloads model files from Hugging Face and
+builds the pinned llama.cpp/DFlash runtime on the rented host.
+
+## What it does
+
+When Pi sends an inference request, the local proxy does this work:
+
+1. It reuses a healthy route, or starts the retained Vast instance.
+2. If no retained instance exists, it rents one qualified RTX 5090 below the
+   configured price cap.
+3. It installs the pinned runtime and verifies model file hashes.
+4. It requires exact model, quantization, context, chat, and long-context speed
+   gates before it accepts a fresh host.
+5. It forwards the original request after the model is ready.
+6. It stops GPU compute after the idle limit. It does not delete retained data.
+
+Concurrent requests share one start operation. A Pi extension shows the wake
+state and elapsed time. Pressing Escape cancels the forwarded HTTP request.
+
+## Requirements
+
+Use a dedicated Ubuntu or Debian server that stays on while you use Pi. The
+installer currently requires root and systemd.
+
+- Python 3.11 or newer, with `venv`
+- Node.js 20 or newer
+- `curl`, `jq`, `openssh-client`, `openssl`, `util-linux`, and `systemd`
+- Tailscale, connected to a tailnet with MagicDNS enabled
+- Pi coding agent, available as `pi`
+- a funded Vast.ai account and API key
+- a reusable Tailscale auth key
+- at least 150 GB of disk on the rented host
+
+The first fresh deployment can take a long time. It downloads two model files,
+builds llama.cpp, quantizes the draft model, and runs a long-context speed gate.
+A retained Vast instance normally starts much faster.
+
+## Install
+
+Clone the repository on the Pi client server. Then run:
+
+```sh
+sudo ./scripts/install.sh
+sudo qwen-cloud-configure
+sudo qwen-cloud-audit
+```
+
+`qwen-cloud-configure` asks for the Vast.ai and Tailscale keys without echoing
+them. It stores them in root-only files. For unattended setup, pass them as
+`VAST_API_KEY` and `TAILSCALE_AUTH_KEY` environment variables.
+
+The default maximum Vast price is $0.53 per hour. To use another limit, run
+`sudo systemctl edit qwen-cloud-proxy.service` and add:
+
+```ini
+[Service]
+Environment=QWEN38_MAX_DPH=0.45
+```
+
+Restart the service after you save the override.
+
+## Use with Pi
+
+Start or continue a Pi session:
+
+```sh
+pi-qwen-cloud
+pi-qwen-cloud --continue
+```
+
+If the instance stopped while Pi stayed open, send the next prompt normally.
+The prompt stays queued while the proxy starts the model. The Pi status line
+shows the wake timer. Use `/qwen-wake-status` for more detail.
+
+Useful lifecycle commands are:
+
+```sh
+sudo qwen-cloud doctor
+sudo qwen-cloud status
+sudo qwen-cloud ensure
+sudo qwen-cloud stop
+sudo qwen-cloud-audit
+```
+
+`stop` stops compute but keeps the Vast instance and its storage. Vast can
+still charge for retained storage. Delete the instance in Vast.ai when you no
+longer need it.
+
+## Measured reference result
+
+The accepted reference host used an RTX 5090, a modern Ryzen CPU, at least 48 GB
+of system RAM, and high PCIe bandwidth. A 120,844-token prompt with a
+2,048-token output reached 84.62 decode tokens per second. A retained-host cold
+start reached the model in about 47 seconds. These results are not guarantees.
+Host CPU, PCIe, disk, network, and current Vast capacity can change them.
+
+## Security
+
+The model server listens on the rented host loopback interface. Tailscale TCP
+Serve makes it available only inside the tailnet. A bearer key protects the
+OpenAI-compatible endpoint. The local Pi proxy listens on `127.0.0.1`.
+
+Read [SECURITY.md](SECURITY.md) before installation. Do not commit configuration
+files, runtime state, keys, model files, or captured prompts.
+
+## Test
+
+Run the local release gates:
+
+```sh
+./scripts/release-check.sh
+```
+
+The default test does not rent a GPU. The paid hardware acceptance test is in
+[docs/VALIDATION.md](docs/VALIDATION.md).
+
+## Limits
+
+- Version 0.1 supports only Vast.ai and one RTX 5090 profile.
+- The installer supports root-based Linux systems with systemd.
+- A fresh host performs a source build. There is no public binary build cache.
+- One model slot is configured. Parallel long-context requests compete for it.
+- The lifecycle code can stop or rent compute. Review the price cap first.
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
+[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for more detail.

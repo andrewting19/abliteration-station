@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+config=${QWEN_CLOUD_CONFIG:-/etc/qwen-cloud/config.json}
+proxy_url=${PI_QWEN_CLOUD_URL:-http://127.0.0.1:17072}
+curl_bin=${QWEN_CLOUD_CURL:-curl}
+qwen_cloud_bin=${QWEN_CLOUD_CLI:-/usr/local/bin/qwen-cloud}
+pi_bin=${PI_QWEN_BIN:-$(command -v pi || true)}
+bootstrap_hold_seconds=${QWEN_CLOUD_BOOTSTRAP_HOLD_SECONDS:-1800}
+inhibit_active=0
+
+[[ -n "$pi_bin" && -x "$pi_bin" ]] || {
+  echo "Pi is not installed or PI_QWEN_BIN is not executable." >&2
+  exit 1
+}
+
+"$curl_bin" -fsS -X POST \
+  "$proxy_url/lifecycle/inhibit?seconds=$bootstrap_hold_seconds" >/dev/null || {
+  echo "The local Qwen lifecycle proxy is not available." >&2
+  exit 1
+}
+inhibit_active=1
+release_inhibit() {
+  if [[ "$inhibit_active" == 1 ]]; then
+    "$curl_bin" -fsS -X POST "$proxy_url/lifecycle/release" >/dev/null 2>&1 || true
+    inhibit_active=0
+  fi
+}
+trap release_inhibit EXIT
+
+"$qwen_cloud_bin" --config "$config" ensure
+
+# The hold protects provider startup and model gates. Release it before Pi
+# starts so the proxy can stop idle compute while an interactive Pi process
+# remains open without an active inference request.
+release_inhibit
+trap - EXIT
+
+"$pi_bin" \
+  --provider qwen-cloud \
+  --model qwen38-cloud \
+  --thinking medium \
+  "$@"

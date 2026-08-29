@@ -1,0 +1,26 @@
+[Unit]
+Description=Qwen Cloud Lifecycle demand-start proxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+RuntimeDirectory=qwen-cloud
+RuntimeDirectoryMode=0700
+Environment=QWEN_CLOUD_CONFIG=/etc/qwen-cloud/config.json
+Environment=QWEN_CLOUD_IDLE_SECONDS=600
+Environment=QWEN_CLOUD_PROXY_PORT=17072
+Environment=QWEN_CLOUD_ROUTE_FILE=/run/qwen-cloud/route.json
+Environment=QWEN_CLOUD_ACTIVITY_FILE=/run/qwen-cloud/activity.json
+Environment=QWEN_CLOUD_ENSURE_COMMAND=/usr/local/bin/qwen-cloud
+ExecStart=/usr/bin/node /usr/local/lib/qwen-cloud/idle-proxy.mjs
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/run/qwen-cloud /run/lock /var/lib/qwen-cloud /root/.ssh /root/.config
+
+[Install]
+WantedBy=multi-user.target

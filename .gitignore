@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+dist/
+build/
+*.egg-info/
+.DS_Store
+.coverage
+
+# Private deployment inputs never belong in the public package.
+*.gguf
+*.tar
+*.tar.zst
+*.key
+*.token
+tailscaled.state
+artifacts/
+.secrets/
+/config/local.json
+/scripts/vast/cache/

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qwen-cloud-lifecycle"
+version = "0.1.0"
+description = "Run a private Qwen model for Pi on demand with a Vast.ai GPU."
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "Andrew Ting"}]
+dependencies = []
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3.11",
+]
+
+[project.scripts]
+qwen-cloud = "qwen_lifecycle.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+set -eu
+key_file=${QWEN_CLOUD_INFERENCE_KEY_FILE:-/root/.config/qwen-cloud/inference_api_key}
+exec /bin/cat "$key_file"

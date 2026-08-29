@@ -1,0 +1,25 @@
+{
+  "provider_order": ["vast"],
+  "fallback_on_runtime_failure": true,
+  "ensure_lock_file": "/run/lock/qwen-cloud-ensure.lock",
+  "ensure_lock_timeout_seconds": 1800,
+  "route_file": "/run/qwen-cloud/route.json",
+  "inference_key_file": "/root/.config/qwen-cloud/inference_api_key",
+  "chat_gate_timeout_seconds": 180,
+  "model": {
+    "id": "qwen38-cloud",
+    "context_size": 262144,
+    "quant_prefix": "Q3_K",
+    "temperature": 1.0,
+    "reasoning_effort": "medium"
+  },
+  "providers": {
+    "vast": {
+      "ensure_command": "/usr/local/lib/qwen-cloud/vast/ensure",
+      "instance_file": "/var/lib/qwen-cloud/vast-instance-id",
+      "lifecycle_token_file": "/root/.config/vastai/vast_api_key",
+      "upstream": "http://qwen38-vast:17070",
+      "start_timeout_seconds": 1800
+    }
+  }
+}

@@ -1,0 +1,555 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+VASTAI=${VASTAI:-$SCRIPT_DIR/.vast-venv/bin/vastai}
+SSH_KEY=${QWEN38_SSH_KEY:-$HOME/.ssh/qwen-cloud-vast}
+QUERY_BASE='gpu_name=RTX_5090 num_gpus=1 verified=True rentable=True reliability>=0.98 direct_port_count>=1 cpu_ram>=48 disk_space>=150 cuda_vers>=13 dlperf>=190 duration>=30'
+QUERY_PERFORMANCE="$QUERY_BASE pcie_bw>=45"
+QUERY_BALANCED="$QUERY_BASE pcie_bw>=25"
+
+die() {
+  echo "$*" >&2
+  exit 1
+}
+
+need_tools() {
+  if [[ ! -x "$VASTAI" ]]; then
+    command -v python3 >/dev/null 2>&1 || die "Python 3 is required"
+    python3 -m venv "$SCRIPT_DIR/.vast-venv"
+    "$SCRIPT_DIR/.vast-venv/bin/pip" install --upgrade pip vastai
+  fi
+  command -v jq >/dev/null 2>&1 || die "jq is required"
+}
+
+need_auth() {
+  [[ -s "$HOME/.config/vastai/vast_api_key" ]] ||
+    die "Vast API key is not configured. Run: $VASTAI set api-key"
+}
+
+show_offers() {
+  local rental_type=${1:-on-demand}
+  local order=dph+
+  local price_field=dph_total
+  if [[ "$rental_type" == "bid" ]]; then
+    order=min_bid+
+    price_field=min_bid
+  elif [[ "$rental_type" != "on-demand" ]]; then
+    die "Rental type must be on-demand or bid"
+  fi
+
+  "$VASTAI" search offers "$QUERY_BASE" \
+    --type "$rental_type" --storage 150 --limit 50 -o "$order" --raw |
+    jq -r --arg price_field "$price_field" '
+      (["OFFER", "PRICE", "TOTAL_WITH_150GB", "RAM_GB", "CPU", "CPU_THREADS", "MAX_DAYS", "RELIABILITY", "DLPERF", "PCIE_GB_S", "DISK_MB_S", "LOCATION"],
+       (.[:15][] | [
+         (.id|tostring),
+         (.[ $price_field ]|tostring),
+         (.dph_total|tostring),
+         ((.cpu_ram/1000)|floor|tostring),
+         .cpu_name,
+         (.cpu_cores_effective|tostring),
+         ((.duration/86400)|floor|tostring),
+         ((.reliability*10000|round/100)|tostring + "%"),
+         (.dlperf|round|tostring),
+         (.pcie_bw|tostring),
+         (.disk_bw|round|tostring),
+         .geolocation
+       ])) | @tsv' | column -t -s $'\t'
+}
+
+ssh_url() {
+  local instance_id=$1
+  "$VASTAI" ssh-url "$instance_id" --raw 2>/dev/null |
+    tr -d '"\r\n'
+}
+
+wait_ssh() {
+  local instance_id=$1
+  local poll_seconds=${QWEN38_SSH_POLL_SECONDS:-10}
+  local deadline=$((SECONDS + 900))
+  local instance_json host port actual_status intended_status running_since=0 stopped_since=0
+  while (( SECONDS < deadline )); do
+    instance_json=$("$VASTAI" show instance "$instance_id" --raw 2>/dev/null || true)
+    if jq -e '.error == true and .status_code == 404' >/dev/null 2>&1 <<<"$instance_json"; then
+      die "Vast instance $instance_id does not exist"
+    fi
+    actual_status=$(jq -r '.actual_status // empty' <<<"$instance_json" 2>/dev/null || true)
+    intended_status=$(jq -r '.intended_status // empty' <<<"$instance_json" 2>/dev/null || true)
+    if [[ "$actual_status" == "running" ]]; then
+      (( running_since == 0 )) && running_since=$SECONDS
+      if (( SECONDS - running_since >= 180 )); then
+        die "Vast instance $instance_id reported running but did not accept SSH within 3 minutes"
+      fi
+    else
+      running_since=0
+    fi
+    if [[ "$actual_status" == "exited" && "$intended_status" == "stopped" ]]; then
+      (( stopped_since == 0 )) && stopped_since=$SECONDS
+      if (( SECONDS - stopped_since >= 90 )); then
+        die "Vast instance $instance_id remained stopped for 90 seconds after its start request"
+      fi
+    else
+      stopped_since=0
+    fi
+    host=$(jq -r '.public_ipaddr // empty' <<<"$instance_json" 2>/dev/null || true)
+    port=$(jq -r '.ports["22/tcp"][0].HostPort // empty' <<<"$instance_json" 2>/dev/null || true)
+    if [[ -n "$host" && "$port" =~ ^[0-9]+$ ]]; then
+      if ssh -o BatchMode=yes -o ConnectTimeout=5 -o ControlMaster=no \
+          -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+          -i "$SSH_KEY" -p "$port" "root@$host" true 2>/dev/null; then
+        printf '%s\t%s\n' "$host" "$port"
+        return 0
+      fi
+    fi
+    sleep "$poll_seconds"
+  done
+  die "SSH did not become ready for instance $instance_id within 15 minutes"
+}
+
+deploy_instance() {
+  local instance_id=$1
+  local endpoint host port
+  endpoint=$(wait_ssh "$instance_id")
+  IFS=$'\t' read -r host port <<<"$endpoint"
+  "$SCRIPT_DIR/deploy-fresh-vast.sh" "$host" "$port" "$SSH_KEY"
+}
+
+copy_workspace() {
+  local source_id=$1
+  local destination_id=$2
+  "$VASTAI" copy \
+    "C.${source_id}:/workspace/qwen38/" \
+    "C.${destination_id}:/tmp/qwen38/" \
+    --identity "$SSH_KEY"
+}
+
+activate_copy() {
+  local instance_id=$1
+  local endpoint host port
+  endpoint=$(wait_ssh "$instance_id")
+  IFS=$'\t' read -r host port <<<"$endpoint"
+  ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+    -i "$SSH_KEY" -p "$port" "root@$host" '
+      set -euo pipefail
+      [[ -d /tmp/qwen38 ]] || { echo "Copied workspace is missing" >&2; exit 1; }
+      install -d -m 0755 /workspace
+      [[ ! -e /workspace/qwen38 ]] || { echo "/workspace/qwen38 already exists" >&2; exit 1; }
+      mv /tmp/qwen38 /workspace/qwen38
+    '
+  "$SCRIPT_DIR/deploy-fresh-vast.sh" "$host" "$port" "$SSH_KEY"
+}
+
+verify_instance() {
+  local instance_id=$1
+  local endpoint host port
+  endpoint=$(wait_ssh "$instance_id")
+  IFS=$'\t' read -r host port <<<"$endpoint"
+  ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+    -i "$SSH_KEY" -p "$port" "root@$host" '
+      set -euo pipefail
+      key=$(cat /workspace/qwen38/api_key)
+      curl -fsS --max-time 5 -H "Authorization: Bearer $key" http://127.0.0.1:17070/health
+      supervisorctl status qwen38-cloud tailscaled-qwen
+      nvidia-smi --query-gpu=name,memory.used,memory.total,power.draw --format=csv,noheader
+    '
+}
+
+performance_gate_instance() {
+  local instance_id=$1
+  local minimum_tps=${QWEN38_PERF_MIN_TPS:-80}
+  local benchmark_root=${QWEN38_PERF_BENCHMARK_ROOT:-/var/lib/qwen-cloud/benchmarks}
+  local capture_dir="$benchmark_root/captures"
+  local replay="$benchmark_root/replay_captured_pi.py"
+  local endpoint host port remote_stage warm_result gate_result measured_tps
+
+  if [[ ! -s "$capture_dir/001-chat-completions.json" || ! -s "$capture_dir/002-chat-completions.json" ]]; then
+    python3 "$benchmark_root/generate.py"
+  fi
+
+  [[ "$instance_id" =~ ^[0-9]+$ ]] || die "Instance ID must be numeric"
+  [[ "$minimum_tps" =~ ^[0-9]+([.][0-9]+)?$ ]] ||
+    die "QWEN38_PERF_MIN_TPS must be numeric"
+  for required in \
+    "$replay" \
+    "$capture_dir/001-chat-completions.json" \
+    "$capture_dir/002-chat-completions.json"; do
+    [[ -s "$required" ]] || die "Performance-gate asset is missing: $required"
+  done
+
+  endpoint=$(wait_ssh "$instance_id")
+  IFS=$'\t' read -r host port <<<"$endpoint"
+  remote_stage="/tmp/qwen38-performance-gate-$instance_id"
+  local ssh_args=(-o ControlMaster=no -o ControlPath=none \
+    -o StrictHostKeyChecking=accept-new -i "$SSH_KEY" -p "$port" "root@$host")
+  local scp_args=(-o ControlMaster=no -o ControlPath=none \
+    -o StrictHostKeyChecking=accept-new -i "$SSH_KEY" -P "$port")
+
+  ssh "${ssh_args[@]}" "install -d -m 0700 '$remote_stage'"
+  scp "${scp_args[@]}" \
+    "$replay" \
+    "$capture_dir/001-chat-completions.json" \
+    "$capture_dir/002-chat-completions.json" \
+    "root@$host:$remote_stage/"
+
+  if ! warm_result=$(ssh "${ssh_args[@]}" \
+      "python3 '$remote_stage/replay_captured_pi.py' '$remote_stage/001-chat-completions.json' --base-url http://127.0.0.1:17070 --api-key-file /workspace/qwen38/api_key --max-tokens 512"); then
+    ssh "${ssh_args[@]}" "rm -f '$remote_stage/replay_captured_pi.py' '$remote_stage/001-chat-completions.json' '$remote_stage/002-chat-completions.json'; rmdir '$remote_stage'" || true
+    return 1
+  fi
+  if ! gate_result=$(ssh "${ssh_args[@]}" \
+      "python3 '$remote_stage/replay_captured_pi.py' '$remote_stage/002-chat-completions.json' --base-url http://127.0.0.1:17070 --api-key-file /workspace/qwen38/api_key --max-tokens 2048"); then
+    ssh "${ssh_args[@]}" "rm -f '$remote_stage/replay_captured_pi.py' '$remote_stage/001-chat-completions.json' '$remote_stage/002-chat-completions.json'; rmdir '$remote_stage'" || true
+    return 1
+  fi
+  ssh "${ssh_args[@]}" "rm -f '$remote_stage/replay_captured_pi.py' '$remote_stage/001-chat-completions.json' '$remote_stage/002-chat-completions.json'; rmdir '$remote_stage'" || true
+
+  measured_tps=$(jq -er '.timings.predicted_per_second' <<<"$gate_result") || return 1
+  jq -n \
+    --argjson instance_id "$instance_id" \
+    --argjson minimum_tps "$minimum_tps" \
+    --argjson measured_tps "$measured_tps" \
+    --argjson warmup "$warm_result" \
+    --argjson benchmark "$gate_result" \
+    '{
+      instance_id: $instance_id,
+      minimum_tps: $minimum_tps,
+      measured_tps: $measured_tps,
+      warmup: $warmup,
+      benchmark: $benchmark
+    }'
+  awk -v actual="$measured_tps" -v minimum="$minimum_tps" \
+    'BEGIN { exit !(actual >= minimum) }'
+}
+
+resume_instance() {
+  local instance_id=$1
+  local endpoint host port
+  endpoint=$(QWEN38_SSH_POLL_SECONDS=2 wait_ssh "$instance_id")
+  IFS=$'\t' read -r host port <<<"$endpoint"
+  ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+    -i "$SSH_KEY" -p "$port" "root@$host" '
+      set -euo pipefail
+      if ! supervisorctl status >/dev/null 2>&1; then
+        supervisord -c /etc/supervisor/supervisord.conf
+        sleep 1
+      fi
+      supervisorctl reread
+      supervisorctl update
+      if ! supervisorctl status tailscaled-qwen | grep -Eq "RUNNING|STARTING"; then
+        supervisorctl start tailscaled-qwen
+      fi
+      if ! supervisorctl status qwen38-cloud | grep -Eq "RUNNING|STARTING"; then
+        supervisorctl start qwen38-cloud
+      fi
+      for _ in $(seq 1 150); do
+        if curl -fsS --max-time 2 \
+          -H "Authorization: Bearer $(cat /workspace/qwen38/api_key)" \
+          http://127.0.0.1:17070/health >/dev/null; then
+          supervisorctl status qwen38-cloud tailscaled-qwen
+          exit 0
+        fi
+        sleep 2
+      done
+      supervisorctl status qwen38-cloud tailscaled-qwen || true
+      tail -n 100 /var/log/portal/qwen38-cloud.err.log >&2 || true
+      exit 1
+    '
+}
+
+capture_private_state() {
+  local instance_id=$1
+  local endpoint host port secret_dir state_path
+  endpoint=$(wait_ssh "$instance_id")
+  IFS=$'\t' read -r host port <<<"$endpoint"
+  secret_dir=${QWEN_CLOUD_PRIVATE_STATE_DIR:-/var/lib/qwen-cloud/vast-private}
+  state_path="$secret_dir/tailscaled.state"
+  install -d -m 0700 "$secret_dir"
+  scp -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+    -i "$SSH_KEY" -P "$port" \
+    "root@$host:/workspace/qwen38/tailscale/tailscaled.state" \
+    "$state_path"
+  chmod 0600 "$state_path"
+  echo "Saved the private Tailscale node state to $state_path"
+}
+
+activate_private_route() {
+  local instance_id=$1
+  local old_instance_id=${2:-}
+  local state_path="${QWEN_CLOUD_PRIVATE_STATE_DIR:-/var/lib/qwen-cloud/vast-private}/tailscaled.state"
+  if [[ ! -s "$state_path" ]]; then
+    initialize_private_route "$instance_id"
+    return
+  fi
+
+  if [[ -n "$old_instance_id" ]]; then
+    [[ "$old_instance_id" =~ ^[0-9]+$ ]] || die "Old instance ID must be numeric"
+    [[ "$old_instance_id" != "$instance_id" ]] || die "Old and new instance IDs must differ"
+    "$VASTAI" stop instance "$old_instance_id" --raw >/dev/null
+  fi
+
+  local endpoint host port
+  endpoint=$(wait_ssh "$instance_id")
+  IFS=$'\t' read -r host port <<<"$endpoint"
+  ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+    -i "$SSH_KEY" -p "$port" "root@$host" \
+    'supervisorctl stop tailscaled-qwen; install -d -m 0700 /workspace/qwen38/tailscale'
+  scp -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+    -i "$SSH_KEY" -P "$port" "$state_path" \
+    "root@$host:/workspace/qwen38/tailscale/tailscaled.state"
+  ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+    -i "$SSH_KEY" -p "$port" "root@$host" '
+      set -euo pipefail
+      chmod 0600 /workspace/qwen38/tailscale/tailscaled.state
+      supervisorctl start tailscaled-qwen
+      for _ in $(seq 1 60); do
+        if tailscale --socket=/var/run/tailscale/tailscaled.sock status --json 2>/dev/null |
+             jq -e ".Self.Online == true" >/dev/null; then
+          tailscale --socket=/var/run/tailscale/tailscaled.sock status --json |
+            jq -r ".Self | [.DNSName,.TailscaleIPs[0],.Online] | @tsv"
+          tailscale --socket=/var/run/tailscale/tailscaled.sock serve status --json
+          exit 0
+        fi
+        sleep 2
+      done
+      exit 1
+    '
+}
+
+initialize_private_route() {
+  local instance_id=$1
+  local auth_key_file=${QWEN_CLOUD_TAILSCALE_AUTH_KEY_FILE:-$HOME/.config/qwen-cloud/tailscale_auth_key}
+  local hostname=${QWEN_CLOUD_TAILSCALE_HOSTNAME:-qwen38-vast}
+  [[ -s "$auth_key_file" ]] || die "Tailscale auth key is missing: $auth_key_file"
+  local endpoint host port
+  endpoint=$(wait_ssh "$instance_id")
+  IFS=$'\t' read -r host port <<<"$endpoint"
+  scp -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+    -i "$SSH_KEY" -P "$port" "$auth_key_file" "root@$host:/tmp/qwen-tailscale-auth-key"
+  ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+    -i "$SSH_KEY" -p "$port" "root@$host" "
+      set -euo pipefail
+      chmod 0600 /tmp/qwen-tailscale-auth-key
+      supervisorctl restart tailscaled-qwen
+      for _ in \$(seq 1 30); do [[ -S /var/run/tailscale/tailscaled.sock ]] && break; sleep 1; done
+      tailscale --socket=/var/run/tailscale/tailscaled.sock up \\
+        --auth-key=file:/tmp/qwen-tailscale-auth-key --hostname='$hostname' --accept-dns=false
+      rm -f /tmp/qwen-tailscale-auth-key
+      tailscale --socket=/var/run/tailscale/tailscaled.sock serve --bg --tcp 17070 tcp://127.0.0.1:17070
+    "
+  capture_private_state "$instance_id"
+  echo "Initialized and saved the private Tailscale route."
+}
+
+rent_offer() {
+  local offer_id=${1:-}
+  local rental_type=${2:-}
+  local cap=${3:-}
+  local confirmation=${4:-}
+  [[ "$offer_id" =~ ^[0-9]+$ ]] || die "Offer ID must be numeric"
+  [[ "$rental_type" == "on-demand" || "$rental_type" == "bid" ]] ||
+    die "Rental type must be on-demand or bid"
+  [[ "$cap" =~ ^[0-9]+([.][0-9]+)?$ ]] || die "Price cap must be numeric"
+  [[ "$confirmation" == "--rent" ]] ||
+    die "No rental was made. Add --rent after you review the exact offer and hourly cap."
+
+  local raw price
+  raw=$("$VASTAI" search offers "$QUERY_BASE" \
+    --type "$rental_type" --storage 150 --limit 100 -o 'dph+' --raw)
+  raw=$(jq --argjson offer_id "$offer_id" 'map(select(.id == $offer_id))' <<<"$raw")
+  [[ $(jq 'length' <<<"$raw") -eq 1 ]] || die "Offer $offer_id is no longer available"
+  if [[ "$rental_type" == "bid" ]]; then
+    price=$(jq -r '.[0].min_bid' <<<"$raw")
+  else
+    price=$(jq -r '.[0].dph_total' <<<"$raw")
+  fi
+  awk -v p="$price" -v c="$cap" 'BEGIN { exit !(p <= c) }' ||
+    die "Live price $price is higher than cap $cap"
+
+  local args=(create instance "$offer_id"
+    --image 'vastai/base-image:cuda-13.2.1-auto'
+    --disk 150 --ssh --direct --cancel-unavail
+    --label qwen38-q3
+    --onstart "$SCRIPT_DIR/vast-onstart.sh")
+  if [[ "$rental_type" == "bid" ]]; then
+    args+=(--bid_price "$cap")
+  fi
+  local created
+  created=$("$VASTAI" "${args[@]}" --raw)
+  jq --argjson offer_id "$offer_id" \
+    '{success, new_contract, offer_id: $offer_id, error, status_code, msg}' <<<"$created"
+  jq -e '.success == true and (.new_contract | type == "number")' >/dev/null <<<"$created"
+}
+
+rent_best() {
+  local rental_type=${1:-}
+  local cap=${2:-}
+  local confirmation=${3:-}
+  [[ "$rental_type" == "on-demand" || "$rental_type" == "bid" ]] ||
+    die "Rental type must be on-demand or bid"
+  [[ "$cap" =~ ^[0-9]+([.][0-9]+)?$ ]] || die "Price cap must be numeric"
+  [[ "$confirmation" == "--rent" ]] ||
+    die "No rental was made. Add --rent after you review the hourly cap."
+
+  local attempt raw offer_id result rc selector
+  local excluded_offer_ids=${QWEN38_EXCLUDE_OFFER_IDS:-}
+  if [[ "$rental_type" == "bid" ]]; then
+    selector='map(select(.min_bid <= $cap) | select(.id as $id | (($excluded | split(",")) | index($id | tostring) | not))) | sort_by(.min_bid, -.pcie_bw, -.reliability) | .[0].id // empty'
+  else
+    selector='map(select(.dph_total <= $cap) | select(.id as $id | (($excluded | split(",")) | index($id | tostring) | not))) | sort_by(.dph_total, -.pcie_bw, -.reliability) | .[0].id // empty'
+  fi
+
+  for attempt in $(seq 1 20); do
+    raw=$("$VASTAI" search offers "$QUERY_BASE" \
+      --type "$rental_type" --storage 150 --limit 50 -o 'dph+' --raw)
+    offer_id=$(jq -r --argjson cap "$cap" --arg excluded "$excluded_offer_ids" "$selector" <<<"$raw")
+    if [[ -z "$offer_id" ]]; then
+      echo "Attempt $attempt: no suitable live offer below $cap; refreshing." >&2
+      sleep 1
+      continue
+    fi
+    echo "Attempt $attempt: offer $offer_id" >&2
+    set +e
+    result=$(rent_offer "$offer_id" "$rental_type" "$cap" --rent 2>&1)
+    rc=$?
+    set -e
+    if [[ $rc -eq 0 ]] && jq -e '.success == true and .new_contract' >/dev/null 2>&1 <<<"$result"; then
+      printf '%s\n' "$result"
+      return 0
+    fi
+    echo "Offer $offer_id was not secured: $result" >&2
+    sleep 1
+  done
+  die "No offer could be secured after 20 fresh attempts"
+}
+
+rent_performance() {
+  local cap=${1:-}
+  local confirmation=${2:-}
+  [[ "$cap" =~ ^[0-9]+([.][0-9]+)?$ ]] || die "Price cap must be numeric"
+  [[ "$confirmation" == "--rent" ]] ||
+    die "No rental was made. Add --rent after you review the hourly cap."
+
+  local attempt raw offer_id result rc
+  for attempt in $(seq 1 40); do
+    raw=$("$VASTAI" search offers "$QUERY_PERFORMANCE" \
+      --type on-demand --storage 150 --limit 100 -o 'dph+' --raw)
+    offer_id=$(jq -r --argjson cap "$cap" '
+      map(select(
+        .dph_total <= $cap and
+        (.cpu_name | test("Ryzen (7 9700X|9 9950X|9 9900X|9 7900X|9 7900)|Threadripper (9960X|PRO 7965WX)|Core.*285K"))
+      )) |
+      sort_by(.dph_total, -.pcie_bw, -.reliability) |
+      .[0].id // empty
+    ' <<<"$raw")
+    if [[ -z "$offer_id" ]]; then
+      echo "Attempt $attempt: no modern-CPU, high-PCIe offer below $cap." >&2
+      sleep 1
+      continue
+    fi
+
+    echo "Attempt $attempt: performance offer $offer_id" >&2
+    set +e
+    result=$("$VASTAI" create instance "$offer_id" \
+      --image 'vastai/base-image:cuda-13.2.1-auto' \
+      --disk 150 --ssh --direct --cancel-unavail \
+      --label qwen38-q3 --onstart "$SCRIPT_DIR/vast-onstart.sh" --raw 2>&1)
+    rc=$?
+    set -e
+    if [[ $rc -eq 0 ]] && jq -e '.success == true and .new_contract' >/dev/null 2>&1 <<<"$result"; then
+      jq '{success, new_contract}' <<<"$result"
+      return 0
+    fi
+    sleep 1
+  done
+  die "No modern-CPU, high-PCIe offer could be secured after 40 attempts"
+}
+
+rent_balanced() {
+  local cap=${1:-}
+  local confirmation=${2:-}
+  [[ "$cap" =~ ^[0-9]+([.][0-9]+)?$ ]] || die "Price cap must be numeric"
+  [[ "$confirmation" == "--rent" ]] ||
+    die "No rental was made. Add --rent after you review the hourly cap."
+
+  local attempt raw offer_id result rc
+  for attempt in $(seq 1 60); do
+    raw=$("$VASTAI" search offers "$QUERY_BALANCED" \
+      --type on-demand --storage 150 --limit 100 -o 'dph+' --raw)
+    offer_id=$(jq -r --argjson cap "$cap" '
+      map(select(
+        .dph_total <= $cap and
+        (.cpu_name | test("Ryzen (7 9700X|9 9950X|9 9900X|9 7900X|9 7900)|Core.*(14700K|285K)"))
+      )) |
+      sort_by(.dph_total, -.pcie_bw, -.reliability) |
+      .[0].id // empty
+    ' <<<"$raw")
+    if [[ -z "$offer_id" ]]; then
+      echo "Attempt $attempt: no modern-CPU balanced offer below $cap." >&2
+      sleep 1
+      continue
+    fi
+
+    echo "Attempt $attempt: balanced offer $offer_id" >&2
+    set +e
+    result=$("$VASTAI" create instance "$offer_id" \
+      --image 'vastai/base-image:cuda-13.2.1-auto' \
+      --disk 150 --ssh --direct --cancel-unavail \
+      --label qwen38-q3 --onstart "$SCRIPT_DIR/vast-onstart.sh" --raw 2>&1)
+    rc=$?
+    set -e
+    if [[ $rc -eq 0 ]] && jq -e '.success == true and .new_contract' >/dev/null 2>&1 <<<"$result"; then
+      jq '{success, new_contract}' <<<"$result"
+      return 0
+    fi
+    sleep 1
+  done
+  die "No modern-CPU balanced offer could be secured after 60 attempts"
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  qwen-vast offers [on-demand|bid]
+  qwen-vast instances
+  qwen-vast rent OFFER_ID on-demand MAX_TOTAL_PER_HOUR --rent
+  qwen-vast rent OFFER_ID bid MAX_GPU_BID_PER_HOUR --rent
+  qwen-vast rent-best on-demand MAX_TOTAL_PER_HOUR --rent
+  qwen-vast rent-best bid MAX_GPU_BID_PER_HOUR --rent
+  qwen-vast rent-performance MAX_TOTAL_PER_HOUR --rent
+  qwen-vast rent-balanced MAX_TOTAL_PER_HOUR --rent
+  qwen-vast wait-ssh INSTANCE_ID
+  qwen-vast deploy INSTANCE_ID
+  qwen-vast copy SOURCE_INSTANCE_ID DESTINATION_INSTANCE_ID
+  qwen-vast activate-copy INSTANCE_ID
+  qwen-vast verify INSTANCE_ID
+  qwen-vast performance-gate INSTANCE_ID
+  qwen-vast resume INSTANCE_ID
+  qwen-vast capture-private-state INSTANCE_ID
+  qwen-vast activate-route NEW_INSTANCE_ID [OLD_INSTANCE_ID]
+
+The rent command does not spend money unless the final argument is --rent.
+Destruction is intentionally not automated.
+EOF
+}
+
+need_tools
+case "${1:-}" in
+  offers) show_offers "${2:-on-demand}" ;;
+  instances) need_auth; "$VASTAI" show instances --raw ;;
+  rent) need_auth; rent_offer "${2:-}" "${3:-}" "${4:-}" "${5:-}" ;;
+  rent-best) need_auth; rent_best "${2:-}" "${3:-}" "${4:-}" ;;
+  rent-performance) need_auth; rent_performance "${2:-}" "${3:-}" ;;
+  rent-balanced) need_auth; rent_balanced "${2:-}" "${3:-}" ;;
+  wait-ssh) need_auth; wait_ssh "${2:?Instance ID is required}" ;;
+  deploy) need_auth; deploy_instance "${2:?Instance ID is required}" ;;
+  copy) need_auth; copy_workspace "${2:?Source ID is required}" "${3:?Destination ID is required}" ;;
+  activate-copy) need_auth; activate_copy "${2:?Instance ID is required}" ;;
+  verify) need_auth; verify_instance "${2:?Instance ID is required}" ;;
+  performance-gate) need_auth; performance_gate_instance "${2:?Instance ID is required}" ;;
+  resume) need_auth; resume_instance "${2:?Instance ID is required}" ;;
+  capture-private-state) need_auth; capture_private_state "${2:?Instance ID is required}" ;;
+  activate-route) need_auth; activate_private_route "${2:?New instance ID is required}" "${3:-}" ;;
+  -h|--help|help|'') usage ;;
+  *) usage >&2; exit 2 ;;
+esac
