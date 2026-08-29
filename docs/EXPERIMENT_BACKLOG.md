@@ -31,6 +31,27 @@ the likely value range near $0.30 to $0.34. Prefer modern CPUs and PCIe above
 45 GB/s. Measure interruption rate and long-context recovery cost. Keep
 on-demand fallback. Do not promote a host below the quality and 80 TPS gates.
 
+The intended future product mode is `economy`:
+
+1. Select a high-PCIe bid host with a total price cap near $0.34/hour.
+2. Prefer the $0.30 to $0.34 value range over an unqualified $0.20 host.
+3. Run the fixed 120K workload and require at least 80 token-weighted decode
+   TPS plus all normal quality gates.
+4. If no bid host passes, start a qualified on-demand host automatically.
+5. Detect a provider interruption separately from a model, network, or Pi
+   error and show the state clearly in the Pi TUI.
+6. Preserve the Pi session locally, restart or replace the instance, restore
+   the private route, and retry only when the request is safe to repeat.
+7. Bound retry count, elapsed time, and total rental cost. Never create two
+   paid instances for one recovery.
+8. Prefer economy mode for short or recoverable work. Allow users to select
+   reliable on-demand mode before important continuous 100K-plus sessions.
+9. Measure the cost of lost prefill, lost decode, and repeated tool work after
+   every interruption. Include those losses in dollars per successful turn.
+
+Promotion requires a complete interrupted-turn test at more than 100K context,
+not only a successful uninterrupted benchmark.
+
 ### E101 - Host value frontier
 
 Sweep RTX 4090 and RTX 5090 offers across CPU generation, PCIe bandwidth, RAM,
