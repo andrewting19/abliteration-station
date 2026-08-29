@@ -31,6 +31,8 @@ cp -a "$source_dir/scripts/vast/." "$vast_root/"
 cp -a "$source_dir/scripts/vast/benchmarks/." /var/lib/abliteration-station/benchmarks/
 install -m 0755 "$source_dir/scripts/vast/replay_captured_pi.py" \
   /var/lib/abliteration-station/benchmarks/replay_captured_pi.py
+install -m 0755 "$source_dir/scripts/vast/tool_loop_gate.py" \
+  /var/lib/abliteration-station/benchmarks/tool_loop_gate.py
 install -m 0755 "$source_dir/scripts/abliteration-station" /usr/local/bin/abliteration-station
 install -m 0755 "$source_dir/scripts/pi-abliteration-station" /usr/local/bin/pi-abliteration-station
 install -m 0755 "$source_dir/scripts/audit.sh" /usr/local/bin/abliteration-station-audit

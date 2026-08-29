@@ -98,9 +98,10 @@ build_matches_source "$BUILD_DIR/bin/llama-server" || {
 
 download_hf_file() {
   local repo=$1
-  local file=$2
-  local expected_sha=$3
-  local destination=$4
+  local revision=$2
+  local file=$3
+  local expected_sha=$4
+  local destination=$5
   local partial="${destination}.part"
 
   if [[ -f "$destination" ]] && echo "$expected_sha  $destination" | sha256sum -c - >/dev/null 2>&1; then
@@ -119,7 +120,7 @@ download_hf_file() {
     --summary-interval=10 \
     --dir "$(dirname -- "$partial")" \
     --out "$(basename -- "$partial")" \
-    "https://huggingface.co/${repo}/resolve/main/${file}?download=true"
+    "https://huggingface.co/${repo}/resolve/${revision}/${file}?download=true"
   echo "$expected_sha  $partial" | sha256sum -c -
   mv "$partial" "$destination"
 }
@@ -129,14 +130,14 @@ DRAFT_BF16_PATH="$QWEN38_ROOT/models/$QWEN38_DRAFT_BF16_FILE"
 DRAFT_Q4_PATH="$QWEN38_ROOT/models/$QWEN38_DRAFT_Q4_FILE"
 
 download_hf_file \
-  "$QWEN38_TARGET_REPO" "$QWEN38_TARGET_FILE" "$QWEN38_TARGET_SHA256" "$TARGET_PATH"
+  "$QWEN38_TARGET_REPO" "$QWEN38_TARGET_REVISION" "$QWEN38_TARGET_FILE" "$QWEN38_TARGET_SHA256" "$TARGET_PATH"
 
 if [[ -f "$DRAFT_Q4_PATH" ]] &&
    echo "$QWEN38_DRAFT_Q4_SHA256  $DRAFT_Q4_PATH" | sha256sum -c - >/dev/null 2>&1; then
   echo "Using the verified copied Q4_0 draft model."
 else
   download_hf_file \
-    "$QWEN38_DRAFT_REPO" "$QWEN38_DRAFT_BF16_FILE" "$QWEN38_DRAFT_BF16_SHA256" "$DRAFT_BF16_PATH"
+    "$QWEN38_DRAFT_REPO" "$QWEN38_DRAFT_REVISION" "$QWEN38_DRAFT_BF16_FILE" "$QWEN38_DRAFT_BF16_SHA256" "$DRAFT_BF16_PATH"
   "$BUILD_DIR/bin/llama-quantize" "$DRAFT_BF16_PATH" "$DRAFT_Q4_PATH" Q4_0 "$(nproc)"
   echo "$QWEN38_DRAFT_Q4_SHA256  $DRAFT_Q4_PATH" | sha256sum -c -
 fi

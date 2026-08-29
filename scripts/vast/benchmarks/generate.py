@@ -38,9 +38,12 @@ def payload(lines: int, instruction: str) -> dict:
 
 def main() -> None:
     ROOT.mkdir(parents=True, exist_ok=True)
+    # With the Qwen3.8 chat template, these sizes produce approximately 112K
+    # and 120K prompt tokens. The former 12,500 and 13,250 values produced a
+    # 239K near-limit request and made the documented 120K gate inaccurate.
     requests = [
-        payload(12_500, "Identify three repeated structural patterns."),
-        payload(13_250, "Propose a concise refactor and explain its invariants."),
+        payload(6_250, "Identify three repeated structural patterns."),
+        payload(6_600, "Propose a concise refactor and explain its invariants."),
     ]
     for index, request in enumerate(requests, start=1):
         path = ROOT / f"{index:03d}-chat-completions.json"
