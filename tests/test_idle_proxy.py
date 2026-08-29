@@ -154,7 +154,11 @@ class IdleProxyTest(unittest.TestCase):
     def test_metrics_record_timing_without_request_or_response_content(self) -> None:
         self.start_proxy()
         self.assertEqual(self.request(), {"ok": True})
-        record = json.loads((self.root / "metrics.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+        metrics = self.root / "metrics.jsonl"
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline and not metrics.exists():
+            time.sleep(0.01)
+        record = json.loads(metrics.read_text(encoding="utf-8").splitlines()[-1])
         self.assertEqual(record["endpoint"], "/v1/chat/completions")
         self.assertEqual(record["status"], 200)
         self.assertGreater(record["total_seconds"], 0)
