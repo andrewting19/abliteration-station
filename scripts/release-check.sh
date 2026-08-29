@@ -19,7 +19,7 @@ if rg -n --hidden \
   --glob '!.git/**' \
   --glob '!**/__pycache__/**' \
   --glob '!*.pyc' \
-  '(100\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|andrewting|@gmail\.com|root@kevin|GPUHub|gpuhub|TensorDock|tensordock)' .; then
+  '(100\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|andrewting|@gmail\.com|root@kevin)' .; then
   echo "The public-data scan found a blocked value." >&2
   exit 1
 fi

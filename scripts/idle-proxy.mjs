@@ -2,6 +2,7 @@
 
 import fs from "node:fs";
 import http from "node:http";
+import crypto from "node:crypto";
 import { spawn } from "node:child_process";
 
 const listenHost = process.env.ABLITERATION_STATION_PROXY_HOST ?? "127.0.0.1";
@@ -14,6 +15,7 @@ const activityFile = process.env.ABLITERATION_STATION_ACTIVITY_FILE ?? "/run/abl
 const stopCommand = process.env.ABLITERATION_STATION_STOP_COMMAND ?? "/usr/local/bin/abliteration-station";
 const ensureCommand = process.env.ABLITERATION_STATION_ENSURE_COMMAND ?? "/usr/local/bin/abliteration-station";
 const configFile = process.env.ABLITERATION_STATION_CONFIG ?? "/etc/abliteration-station/config.json";
+const metricsFile = process.env.ABLITERATION_STATION_METRICS_FILE ?? "/var/lib/abliteration-station/metrics/requests.jsonl";
 
 if (!Number.isFinite(idleSeconds) || idleSeconds < (testMode ? 1 : 60)) {
   throw new Error(`ABLITERATION_STATION_IDLE_SECONDS must be at least ${testMode ? 1 : 60}`);
@@ -23,6 +25,7 @@ if (!Number.isFinite(idlePollMs) || idlePollMs < (testMode ? 100 : 1000)) {
 }
 
 fs.mkdirSync(new URL(".", `file://${activityFile}`).pathname, { recursive: true });
+fs.mkdirSync(new URL(".", `file://${metricsFile}`).pathname, { recursive: true });
 let activeRequests = 0;
 let lastActivityMs = Date.now();
 let stoppedActivityMs = null;
@@ -156,6 +159,32 @@ const server = http.createServer(async (req, res) => {
     activeRequests += 1;
     touch();
   }
+  const metric = isInference ? {
+    schema_version: 1,
+    request_id: crypto.randomUUID(),
+    started_at: new Date().toISOString(),
+    endpoint: new URL(req.url ?? "/", "http://localhost").pathname,
+    wake_required: false,
+    wake_seconds: null,
+    upstream_headers_seconds: null,
+    first_response_byte_seconds: null,
+    total_seconds: null,
+    status: null,
+    response_bytes: 0,
+    cancelled: false,
+    error: null,
+    usage: null,
+    timings: null,
+  } : null;
+  const metricStarted = process.hrtime.bigint();
+  const elapsedSeconds = () => Number(process.hrtime.bigint() - metricStarted) / 1e9;
+  let metricWritten = false;
+  const writeMetric = () => {
+    if (metric === null || metricWritten) return;
+    metricWritten = true;
+    metric.total_seconds = elapsedSeconds();
+    fs.appendFileSync(metricsFile, `${JSON.stringify(metric)}\n`, { mode: 0o600 });
+  };
   let finished = false;
   const finish = () => {
     if (finished) return;
@@ -164,11 +193,19 @@ const server = http.createServer(async (req, res) => {
       activeRequests = Math.max(0, activeRequests - 1);
       touch();
     }
+    writeMetric();
   };
   let route;
   try {
+    const hadRoute = fs.existsSync(routeFile);
+    if (metric !== null) metric.wake_required = !hadRoute;
     route = isInference ? await ensureRoute() : readRoute();
+    if (metric !== null && !hadRoute) metric.wake_seconds = elapsedSeconds();
   } catch (error) {
+    if (metric !== null) {
+      metric.status = 503;
+      metric.error = `model wake failed: ${error.message}`;
+    }
     finish();
     res.writeHead(503, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: { message: `model wake failed: ${error.message}` } }));
@@ -187,21 +224,53 @@ const server = http.createServer(async (req, res) => {
     path: req.url,
     headers: { ...req.headers, host: upstream.host },
   }, (upstreamResponse) => {
+    if (metric !== null) {
+      metric.status = upstreamResponse.statusCode ?? 502;
+      metric.upstream_headers_seconds = elapsedSeconds();
+    }
     res.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.headers);
-    upstreamResponse.on("data", () => { if (isInference) touch(); });
+    let eventBuffer = "";
+    upstreamResponse.on("data", (chunk) => {
+      if (isInference) touch();
+      if (metric === null) return;
+      if (metric.first_response_byte_seconds === null) metric.first_response_byte_seconds = elapsedSeconds();
+      metric.response_bytes += chunk.length;
+      eventBuffer += chunk.toString("utf8");
+      const lines = eventBuffer.split(/\r?\n/);
+      eventBuffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!line.startsWith("data:")) continue;
+        const value = line.slice(5).trim();
+        if (!value || value === "[DONE]") continue;
+        try {
+          const event = JSON.parse(value);
+          if (event.usage && typeof event.usage === "object") metric.usage = event.usage;
+          if (event.timings && typeof event.timings === "object") metric.timings = event.timings;
+        } catch {
+          // Ignore partial or non-JSON server events. Never store their content.
+        }
+      }
+    });
     upstreamResponse.on("end", finish);
     upstreamResponse.on("error", finish);
     upstreamResponse.pipe(res);
   });
   upstreamRequest.setTimeout(7_200_000, () => upstreamRequest.destroy(new Error("upstream timed out")));
   upstreamRequest.on("error", (error) => {
+    if (metric !== null) metric.error = error.message;
     finish();
     if (!res.destroyed && !res.headersSent) res.writeHead(502, { "Content-Type": "application/json" });
     if (!res.destroyed && !res.writableEnded) res.end(JSON.stringify({ error: { message: error.message } }));
   });
-  req.on("aborted", () => upstreamRequest.destroy(new Error("client cancelled request")));
+  req.on("aborted", () => {
+    if (metric !== null) metric.cancelled = true;
+    upstreamRequest.destroy(new Error("client cancelled request"));
+  });
   res.on("close", () => {
-    if (!finished) upstreamRequest.destroy(new Error("client closed response"));
+    if (!finished) {
+      if (metric !== null) metric.cancelled = true;
+      upstreamRequest.destroy(new Error("client closed response"));
+    }
     finish();
   });
   req.pipe(upstreamRequest);

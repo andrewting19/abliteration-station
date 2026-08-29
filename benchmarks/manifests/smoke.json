@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "experiment_id": "smoke-current-profile",
+  "variant": "baseline",
+  "workload_class": "novel-agentic",
+  "hourly_compute_usd": 0.0,
+  "request": {
+    "model": "qwen38-cloud",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Return the sum of the even integers from 2 through 20 and explain the invariant in one sentence."
+      }
+    ],
+    "max_tokens": 256,
+    "temperature": 1.0,
+    "seed": 424242,
+    "stream": true,
+    "chat_template_kwargs": {
+      "enable_thinking": true,
+      "reasoning_effort": "medium"
+    }
+  },
+  "quality": {
+    "required_substrings": ["110"],
+    "forbidden_substrings": [],
+    "minimum_output_chars": 3
+  },
+  "tags": ["synthetic", "smoke"]
+}

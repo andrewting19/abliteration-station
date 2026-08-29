@@ -145,3 +145,7 @@ The default test does not rent a GPU. The paid hardware acceptance test is in
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for more detail.
+
+Cost and speed work must use the [measurement contract](docs/MEASUREMENT.md).
+Future ideas are in the [experiment backlog](docs/EXPERIMENT_BACKLOG.md), and
+the source inventory is in [docs/RESEARCH_SOURCES.md](docs/RESEARCH_SOURCES.md).

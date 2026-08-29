@@ -40,3 +40,5 @@ Tailscale connection.
 - `/var/lib/abliteration-station/vast-private/tailscaled.state`
 - `/etc/abliteration-station/config.json` after local changes
 - model files, build caches, captured prompts, and provider state
+- `/var/lib/abliteration-station/metrics/requests.jsonl` because timing and
+  usage history can still reveal work patterns

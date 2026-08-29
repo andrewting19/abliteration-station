@@ -21,10 +21,12 @@ fi
   exit 1
 }
 
-install -d -m 0755 "$install_root/src" "$vast_root" /etc/abliteration-station \
+install -d -m 0755 "$install_root/src" "$install_root/benchmarks" "$vast_root" /etc/abliteration-station \
   /root/.config/abliteration-station /root/.config/vastai /root/.pi/agent/extensions \
-  /usr/local/lib/abliteration-station /var/lib/abliteration-station/benchmarks /run/abliteration-station
+  /usr/local/lib/abliteration-station /var/lib/abliteration-station/benchmarks \
+  /var/lib/abliteration-station/metrics /run/abliteration-station
 cp -a "$source_dir/src/." "$install_root/src/"
+cp -a "$source_dir/benchmarks/." "$install_root/benchmarks/"
 cp -a "$source_dir/scripts/vast/." "$vast_root/"
 cp -a "$source_dir/scripts/vast/benchmarks/." /var/lib/abliteration-station/benchmarks/
 install -m 0755 "$source_dir/scripts/vast/replay_captured_pi.py" \

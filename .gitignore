@@ -19,3 +19,4 @@ artifacts/
 .secrets/
 /config/local.json
 /scripts/vast/cache/
+/private-results/

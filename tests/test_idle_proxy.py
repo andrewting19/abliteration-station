@@ -108,6 +108,7 @@ class IdleProxyTest(unittest.TestCase):
                 "ABLITERATION_STATION_ENSURE_COMMAND": str(ensure),
                 "ABLITERATION_STATION_STOP_COMMAND": str(stop),
                 "ABLITERATION_STATION_CONFIG": str(self.root / "config.json"),
+                "ABLITERATION_STATION_METRICS_FILE": str(self.root / "metrics.jsonl"),
             }
         )
         self.process = subprocess.Popen(
@@ -149,6 +150,18 @@ class IdleProxyTest(unittest.TestCase):
         self.assertEqual(caught.exception.code, 503)
         body = json.loads(caught.exception.read())
         self.assertIn("model wake failed", body["error"]["message"])
+
+    def test_metrics_record_timing_without_request_or_response_content(self) -> None:
+        self.start_proxy()
+        self.assertEqual(self.request(), {"ok": True})
+        record = json.loads((self.root / "metrics.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+        self.assertEqual(record["endpoint"], "/v1/chat/completions")
+        self.assertEqual(record["status"], 200)
+        self.assertGreater(record["total_seconds"], 0)
+        self.assertGreater(record["response_bytes"], 0)
+        serialized = json.dumps(record)
+        self.assertNotIn("qwen38-cloud", serialized)
+        self.assertNotIn("ok", serialized)
 
     def test_idle_route_is_stopped_once(self) -> None:
         _count, stop_count = self.start_proxy(idle_seconds=1)

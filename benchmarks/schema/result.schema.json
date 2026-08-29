@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Abliteration Station benchmark result",
+  "type": "object",
+  "required": [
+    "schema_version", "experiment_id", "variant", "workload_class",
+    "started_at", "success", "quality_pass", "latency", "tokens", "cost"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "experiment_id": {"type": "string"},
+    "variant": {"type": "string"},
+    "workload_class": {"type": "string"},
+    "started_at": {"type": "string"},
+    "success": {"type": "boolean"},
+    "quality_pass": {"type": "boolean"},
+    "error": {"type": ["string", "null"]},
+    "latency": {
+      "type": "object",
+      "required": ["total_seconds", "time_to_first_token_seconds"],
+      "properties": {
+        "lifecycle_seconds": {"type": ["number", "null"]},
+        "time_to_first_token_seconds": {"type": ["number", "null"]},
+        "total_seconds": {"type": "number"},
+        "prefill_tokens_per_second": {"type": ["number", "null"]},
+        "decode_tokens_per_second": {"type": ["number", "null"]}
+      }
+    },
+    "tokens": {
+      "type": "object",
+      "required": ["prompt", "completion"],
+      "properties": {
+        "prompt": {"type": "integer"},
+        "completion": {"type": "integer"},
+        "drafted": {"type": ["integer", "null"]},
+        "accepted": {"type": ["integer", "null"]},
+        "acceptance_rate": {"type": ["number", "null"]}
+      }
+    },
+    "cost": {
+      "type": "object",
+      "required": ["hourly_compute_usd", "turn_compute_usd"],
+      "properties": {
+        "hourly_compute_usd": {"type": "number"},
+        "turn_compute_usd": {"type": "number"},
+        "usd_per_million_output_tokens": {"type": ["number", "null"]}
+      }
+    },
+    "host": {"type": "object"},
+    "runtime": {"type": "object"},
+    "tags": {"type": "array", "items": {"type": "string"}}
+  }
+}
