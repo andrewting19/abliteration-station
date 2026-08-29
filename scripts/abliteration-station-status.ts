@@ -1,7 +1,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-const STATUS_KEY = "qwen-cloud-wake";
-const WIDGET_KEY = "qwen-cloud-wake";
+const STATUS_KEY = "abliteration-station-wake";
+const WIDGET_KEY = "abliteration-station-wake";
 const HEALTH_URL = "http://127.0.0.1:17072/healthz";
 
 export default function (pi: ExtensionAPI) {
@@ -10,7 +10,7 @@ export default function (pi: ExtensionAPI) {
   let readyTimer: ReturnType<typeof setTimeout> | undefined;
 
   const isQwenCloud = (ctx: ExtensionContext) =>
-    ctx.model?.provider === "qwen-cloud" || ctx.model?.id === "qwen38-cloud";
+    ctx.model?.provider === "abliteration-station" || ctx.model?.id === "qwen38-cloud";
 
   const renderWake = (ctx: ExtensionContext) => {
     const elapsed = Math.max(0, Math.floor((Date.now() - wakeStartedAt) / 1000));
@@ -81,8 +81,8 @@ export default function (pi: ExtensionAPI) {
     ctx.ui.setStatus(STATUS_KEY, undefined);
   });
 
-  pi.registerCommand("qwen-wake-status", {
-    description: "Show the current Qwen cloud route and wake state",
+  pi.registerCommand("abliteration-status", {
+    description: "Show the current Abliteration Station route and wake state",
     handler: async (_args, ctx) => {
       try {
         const response = await fetch(HEALTH_URL, { signal: AbortSignal.timeout(1500) });

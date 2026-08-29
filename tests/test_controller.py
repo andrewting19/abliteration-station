@@ -5,9 +5,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from qwen_lifecycle.controller import Controller
-from qwen_lifecycle.errors import LifecycleError, ProviderUnavailable
-from qwen_lifecycle.providers.base import Route
+from abliteration_station.controller import Controller
+from abliteration_station.errors import LifecycleError, ProviderUnavailable
+from abliteration_station.providers.base import Route
 
 
 class FakeProvider:
@@ -50,7 +50,7 @@ class ControllerTest(unittest.TestCase):
                 "vast": FakeProvider("vast", Route("vast", "http://vast.test", {"id": 1})),
             }
             controller = Controller(config)
-            with patch("qwen_lifecycle.controller.make_provider", side_effect=lambda name, _: providers[name]), \
+            with patch("abliteration_station.controller.make_provider", side_effect=lambda name, _: providers[name]), \
                  patch.object(controller, "model_gate"), patch.object(controller, "chat_gate"):
                 route = controller.ensure()
             self.assertEqual(route.provider, "vast")
@@ -67,7 +67,7 @@ class ControllerTest(unittest.TestCase):
             }
             provider = FakeProvider("vast", LifecycleError("capacity unavailable"))
             controller = Controller(config)
-            with patch("qwen_lifecycle.controller.make_provider", return_value=provider):
+            with patch("abliteration_station.controller.make_provider", return_value=provider):
                 with self.assertRaisesRegex(LifecycleError, "capacity unavailable"):
                     controller.ensure()
             self.assertTrue(provider.stopped)
@@ -88,7 +88,7 @@ class ControllerTest(unittest.TestCase):
                 "providers": {},
             }
             controller = Controller(config)
-            with patch("qwen_lifecycle.controller.make_provider") as make, \
+            with patch("abliteration_station.controller.make_provider") as make, \
                  patch.object(controller, "model_gate"), patch.object(controller, "chat_gate"):
                 route = controller.ensure()
             self.assertEqual(route.provider, "vast")
@@ -112,7 +112,7 @@ class ControllerTest(unittest.TestCase):
             def gate(upstream):
                 if upstream == "http://bad.test":
                     raise LifecycleError("bad model")
-            with patch("qwen_lifecycle.controller.make_provider", side_effect=lambda name, _: providers[name]), \
+            with patch("abliteration_station.controller.make_provider", side_effect=lambda name, _: providers[name]), \
                  patch.object(controller, "model_gate", side_effect=gate), patch.object(controller, "chat_gate"):
                 route = controller.ensure()
             self.assertEqual(route.provider, "second")
@@ -134,7 +134,7 @@ class ControllerTest(unittest.TestCase):
             }
             provider = FakeProvider("vast", None)
             controller = Controller(config)
-            with patch("qwen_lifecycle.controller.make_provider", return_value=provider):
+            with patch("abliteration_station.controller.make_provider", return_value=provider):
                 controller.stop()
             self.assertTrue(provider.stopped)
             self.assertFalse(route_file.exists())

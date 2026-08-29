@@ -5,9 +5,9 @@
 Run:
 
 ```sh
-sudo qwen-cloud status
-sudo journalctl -u qwen-cloud-proxy.service -n 200 --no-pager
-sudo /usr/local/lib/qwen-cloud/vast/qwen-vast instances
+sudo abliteration-station status
+sudo journalctl -u abliteration-station-proxy.service -n 200 --no-pager
+sudo /usr/local/lib/abliteration-station/vast/qwen-vast instances
 ```
 
 The first error in the provider output is the useful error. Common causes are
@@ -16,8 +16,8 @@ longer accepts SSH, or a Tailscale key that cannot add a node.
 
 ## Pi waits but shows no wake status
 
-Run `/reload` in Pi after installation. Then run `/qwen-wake-status`. Confirm
-that `/root/.pi/agent/extensions/qwen-cloud-wake-status.ts` exists.
+Run `/reload` in Pi after installation. Then run `/abliteration-status`. Confirm
+that `/root/.pi/agent/extensions/abliteration-station-status.ts` exists.
 
 ## The private host name does not resolve
 
@@ -42,10 +42,10 @@ speed.
 ## Pi reports a context error
 
 Confirm that the model record has `contextWindow` and `maxTokens` set to
-262,144. Run `sudo qwen-cloud-audit`. Pi still needs room for output inside the
+262,144. Run `sudo abliteration-station-audit`. Pi still needs room for output inside the
 same total context window.
 
 ## Stop all paid compute
 
-Run `sudo qwen-cloud stop`. Then inspect the Vast.ai instance list. This stops
+Run `sudo abliteration-station stop`. Then inspect the Vast.ai instance list. This stops
 the recorded instance but does not delete it or stop its storage charge.

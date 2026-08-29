@@ -10,7 +10,7 @@ from .errors import LifecycleError
 
 
 def parser() -> argparse.ArgumentParser:
-    root = argparse.ArgumentParser(prog="qwen-cloud")
+    root = argparse.ArgumentParser(prog="abliteration-station")
     root.add_argument("--config", help="JSON configuration path")
     commands = root.add_subparsers(dest="command", required=True)
     commands.add_parser("ensure", help="Start the first usable provider and run model gates")
@@ -39,7 +39,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1 if all(report.values()) else 0
         return 0
     except (LifecycleError, OSError, ValueError, KeyError) as error:
-        print(f"qwen-cloud: {error}", file=sys.stderr)
+        print(f"abliteration-station: {error}", file=sys.stderr)
         return 1
 
 

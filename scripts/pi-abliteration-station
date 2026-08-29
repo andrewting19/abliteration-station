@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-config=${QWEN_CLOUD_CONFIG:-/etc/qwen-cloud/config.json}
-proxy_url=${PI_QWEN_CLOUD_URL:-http://127.0.0.1:17072}
-curl_bin=${QWEN_CLOUD_CURL:-curl}
-qwen_cloud_bin=${QWEN_CLOUD_CLI:-/usr/local/bin/qwen-cloud}
-pi_bin=${PI_QWEN_BIN:-$(command -v pi || true)}
-bootstrap_hold_seconds=${QWEN_CLOUD_BOOTSTRAP_HOLD_SECONDS:-1800}
+config=${ABLITERATION_STATION_CONFIG:-/etc/abliteration-station/config.json}
+proxy_url=${PI_ABLITERATION_STATION_URL:-http://127.0.0.1:17072}
+curl_bin=${ABLITERATION_STATION_CURL:-curl}
+lifecycle_bin=${ABLITERATION_STATION_CLI:-/usr/local/bin/abliteration-station}
+pi_bin=${PI_ABLITERATION_STATION_BIN:-$(command -v pi || true)}
+if [[ -z "$pi_bin" ]]; then
+  for candidate in /root/.nvm/versions/node/*/bin/pi; do
+    [[ -x "$candidate" ]] && pi_bin=$candidate
+  done
+fi
+bootstrap_hold_seconds=${ABLITERATION_STATION_BOOTSTRAP_HOLD_SECONDS:-1800}
 inhibit_active=0
 
 [[ -n "$pi_bin" && -x "$pi_bin" ]] || {
-  echo "Pi is not installed or PI_QWEN_BIN is not executable." >&2
+  echo "Pi is not installed or PI_ABLITERATION_STATION_BIN is not executable." >&2
   exit 1
 }
 
@@ -28,7 +33,7 @@ release_inhibit() {
 }
 trap release_inhibit EXIT
 
-"$qwen_cloud_bin" --config "$config" ensure
+"$lifecycle_bin" --config "$config" ensure
 
 # The hold protects provider startup and model gates. Release it before Pi
 # starts so the proxy can stop idle compute while an interactive Pi process
@@ -37,7 +42,7 @@ release_inhibit
 trap - EXIT
 
 "$pi_bin" \
-  --provider qwen-cloud \
+  --provider abliteration-station \
   --model qwen38-cloud \
   --thinking medium \
   "$@"

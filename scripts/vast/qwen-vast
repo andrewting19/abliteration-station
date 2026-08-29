@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 VASTAI=${VASTAI:-$SCRIPT_DIR/.vast-venv/bin/vastai}
-SSH_KEY=${QWEN38_SSH_KEY:-$HOME/.ssh/qwen-cloud-vast}
+SSH_KEY=${QWEN38_SSH_KEY:-$HOME/.ssh/abliteration-station-vast}
 QUERY_BASE='gpu_name=RTX_5090 num_gpus=1 verified=True rentable=True reliability>=0.98 direct_port_count>=1 cpu_ram>=48 disk_space>=150 cuda_vers>=13 dlperf>=190 duration>=30'
 QUERY_PERFORMANCE="$QUERY_BASE pcie_bw>=45"
 QUERY_BALANCED="$QUERY_BASE pcie_bw>=25"
@@ -158,7 +158,7 @@ verify_instance() {
 performance_gate_instance() {
   local instance_id=$1
   local minimum_tps=${QWEN38_PERF_MIN_TPS:-80}
-  local benchmark_root=${QWEN38_PERF_BENCHMARK_ROOT:-/var/lib/qwen-cloud/benchmarks}
+  local benchmark_root=${QWEN38_PERF_BENCHMARK_ROOT:-/var/lib/abliteration-station/benchmarks}
   local capture_dir="$benchmark_root/captures"
   local replay="$benchmark_root/replay_captured_pi.py"
   local endpoint host port remote_stage warm_result gate_result measured_tps
@@ -262,7 +262,7 @@ capture_private_state() {
   local endpoint host port secret_dir state_path
   endpoint=$(wait_ssh "$instance_id")
   IFS=$'\t' read -r host port <<<"$endpoint"
-  secret_dir=${QWEN_CLOUD_PRIVATE_STATE_DIR:-/var/lib/qwen-cloud/vast-private}
+  secret_dir=${ABLITERATION_STATION_PRIVATE_STATE_DIR:-/var/lib/abliteration-station/vast-private}
   state_path="$secret_dir/tailscaled.state"
   install -d -m 0700 "$secret_dir"
   scp -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
@@ -276,7 +276,7 @@ capture_private_state() {
 activate_private_route() {
   local instance_id=$1
   local old_instance_id=${2:-}
-  local state_path="${QWEN_CLOUD_PRIVATE_STATE_DIR:-/var/lib/qwen-cloud/vast-private}/tailscaled.state"
+  local state_path="${ABLITERATION_STATION_PRIVATE_STATE_DIR:-/var/lib/abliteration-station/vast-private}/tailscaled.state"
   if [[ ! -s "$state_path" ]]; then
     initialize_private_route "$instance_id"
     return
@@ -318,8 +318,8 @@ activate_private_route() {
 
 initialize_private_route() {
   local instance_id=$1
-  local auth_key_file=${QWEN_CLOUD_TAILSCALE_AUTH_KEY_FILE:-$HOME/.config/qwen-cloud/tailscale_auth_key}
-  local hostname=${QWEN_CLOUD_TAILSCALE_HOSTNAME:-qwen38-vast}
+  local auth_key_file=${ABLITERATION_STATION_TAILSCALE_AUTH_KEY_FILE:-$HOME/.config/abliteration-station/tailscale_auth_key}
+  local hostname=${ABLITERATION_STATION_TAILSCALE_HOSTNAME:-qwen38-vast}
   [[ -s "$auth_key_file" ]] || die "Tailscale auth key is missing: $auth_key_file"
   local endpoint host port
   endpoint=$(wait_ssh "$instance_id")

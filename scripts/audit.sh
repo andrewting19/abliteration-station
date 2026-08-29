@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-config=${QWEN_CLOUD_CONFIG:-/etc/qwen-cloud/config.json}
-cli=${QWEN_CLOUD_CLI:-/usr/local/bin/qwen-cloud}
-proxy_url=${PI_QWEN_CLOUD_URL:-http://127.0.0.1:17072}
+config=${ABLITERATION_STATION_CONFIG:-/etc/abliteration-station/config.json}
+cli=${ABLITERATION_STATION_CLI:-/usr/local/bin/abliteration-station}
+proxy_url=${PI_ABLITERATION_STATION_URL:-http://127.0.0.1:17072}
 
 jq -e '
   .provider_order == ["vast"] and
@@ -12,23 +12,33 @@ jq -e '
   .model.quant_prefix == "Q3_K" and
   .model.temperature == 1.0 and
   .model.reasoning_effort == "medium" and
-  .providers.vast.ensure_command == "/usr/local/lib/qwen-cloud/vast/ensure"
+  .providers.vast.ensure_command == "/usr/local/lib/abliteration-station/vast/ensure"
 ' "$config" >/dev/null
 
-for secret in /root/.config/qwen-cloud/inference_api_key \
-  /root/.config/qwen-cloud/tailscale_auth_key /root/.config/vastai/vast_api_key; do
+for secret in /root/.config/abliteration-station/inference_api_key \
+  /root/.config/vastai/vast_api_key; do
   [[ -s "$secret" ]]
   [[ $(stat -c %a "$secret") == 600 ]]
   [[ $(stat -c %U "$secret") == root ]]
 done
 
-systemctl is-enabled --quiet qwen-cloud-proxy.service
-systemctl is-active --quiet qwen-cloud-proxy.service
+if [[ -s /root/.config/abliteration-station/tailscale_auth_key ]]; then
+  [[ $(stat -c %a /root/.config/abliteration-station/tailscale_auth_key) == 600 ]]
+  [[ $(stat -c %U /root/.config/abliteration-station/tailscale_auth_key) == root ]]
+else
+  state=/var/lib/abliteration-station/vast-private/tailscaled.state
+  [[ -s "$state" ]]
+  [[ $(stat -c %a "$state") == 600 ]]
+  [[ $(stat -c %U "$state") == root ]]
+fi
+
+systemctl is-enabled --quiet abliteration-station-proxy.service
+systemctl is-active --quiet abliteration-station-proxy.service
 ss -ltn | grep -q ':17072 '
-[[ -x /usr/local/bin/pi-qwen-cloud ]]
-[[ -s /root/.pi/agent/extensions/qwen-cloud-wake-status.ts ]]
+[[ -x /usr/local/bin/pi-abliteration-station ]]
+[[ -s /root/.pi/agent/extensions/abliteration-station-status.ts ]]
 [[ -s /root/.pi/agent/models.json ]]
-jq -e '.providers["qwen-cloud"].models | any(.id == "qwen38-cloud")' \
+jq -e '.providers["abliteration-station"].models | any(.id == "qwen38-cloud")' \
   /root/.pi/agent/models.json >/dev/null
 
 doctor=$($cli --config "$config" doctor)
@@ -40,4 +50,4 @@ jq -e '
   (.wake_in_flight | type) == "boolean"
 ' >/dev/null <<<"$health"
 
-echo "QWEN_CLOUD_AUDIT_OK"
+echo "ABLITERATION_STATION_AUDIT_OK"

@@ -24,7 +24,7 @@ def make_provider(name: str, config: dict[str, Any]) -> Provider:
 class Controller:
     def __init__(self, config: dict[str, Any]):
         self.config = config
-        self.route_file = Path(config.get("route_file", "/run/qwen-cloud/route.json"))
+        self.route_file = Path(config.get("route_file", "/run/abliteration-station/route.json"))
 
     def _active_route(self) -> Route | None:
         if not self.route_file.is_file():
@@ -41,7 +41,7 @@ class Controller:
             return None
 
     def _lock(self):
-        lock_file = Path(self.config.get("ensure_lock_file", "/run/lock/qwen-cloud-ensure.lock"))
+        lock_file = Path(self.config.get("ensure_lock_file", "/run/lock/abliteration-station-ensure.lock"))
         lock_file.parent.mkdir(parents=True, exist_ok=True)
         handle = lock_file.open("a+", encoding="utf-8")
         deadline = time.monotonic() + float(self.config.get("ensure_lock_timeout_seconds", 1800))

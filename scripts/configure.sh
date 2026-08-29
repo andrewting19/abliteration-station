@@ -2,10 +2,10 @@
 set -euo pipefail
 
 [[ ${EUID:-$(id -u)} -eq 0 ]] || { echo "Run this command as root." >&2; exit 1; }
-secret_dir=/root/.config/qwen-cloud
+secret_dir=/root/.config/abliteration-station
 vast_secret_dir=/root/.config/vastai
-vast_root=${QWEN_CLOUD_VAST_ROOT:-/usr/local/lib/qwen-cloud/vast}
-install_root=${QWEN_CLOUD_INSTALL_ROOT:-/opt/qwen-cloud-lifecycle}
+vast_root=${ABLITERATION_STATION_VAST_ROOT:-/usr/local/lib/abliteration-station/vast}
+install_root=${ABLITERATION_STATION_INSTALL_ROOT:-/opt/abliteration-station}
 install -d -m 0700 "$secret_dir" "$vast_secret_dir" /root/.ssh
 
 read_secret() {
@@ -28,14 +28,14 @@ read_secret TAILSCALE_AUTH_KEY "Reusable Tailscale auth key" | \
 if [[ ! -s "$secret_dir/inference_api_key" ]]; then
   openssl rand -hex 32 | install -m 0600 /dev/stdin "$secret_dir/inference_api_key"
 fi
-if [[ ! -s /root/.ssh/qwen-cloud-vast ]]; then
-  ssh-keygen -q -t ed25519 -N '' -f /root/.ssh/qwen-cloud-vast
+if [[ ! -s /root/.ssh/abliteration-station-vast ]]; then
+  ssh-keygen -q -t ed25519 -N '' -f /root/.ssh/abliteration-station-vast
 fi
 
 PI_CODING_AGENT_DIR=${PI_CODING_AGENT_DIR:-/root/.pi/agent} \
   "$install_root/install-pi-provider.py"
 "$vast_root/qwen-vast" help >/dev/null
-python3 /var/lib/qwen-cloud/benchmarks/generate.py
-systemctl enable --now qwen-cloud-proxy.service
+python3 /var/lib/abliteration-station/benchmarks/generate.py
+systemctl enable --now abliteration-station-proxy.service
 echo "Configuration is complete."
-echo "Start Pi with: pi-qwen-cloud"
+echo "Start Pi with: pi-abliteration-station"

@@ -1,6 +1,9 @@
-# Qwen Cloud Lifecycle
+# Abliteration Station
 
-Qwen Cloud Lifecycle gives [Pi](https://github.com/earendil-works/pi) a private,
+**Private abliterated models on demand for Pi. Rent the GPU, wake the model,
+and stop paying when it sleeps.**
+
+Abliteration Station gives [Pi](https://github.com/earendil-works/pi) a private,
 OpenAI-compatible Qwen model on a rented Vast.ai GPU. It starts compute on
 demand, keeps an open Pi session usable after idle shutdown, and stops paid GPU
 compute after ten minutes without an inference request.
@@ -59,16 +62,16 @@ Clone the repository on the Pi client server. Then run:
 
 ```sh
 sudo ./scripts/install.sh
-sudo qwen-cloud-configure
-sudo qwen-cloud-audit
+sudo abliteration-station-configure
+sudo abliteration-station-audit
 ```
 
-`qwen-cloud-configure` asks for the Vast.ai and Tailscale keys without echoing
+`abliteration-station-configure` asks for the Vast.ai and Tailscale keys without echoing
 them. It stores them in root-only files. For unattended setup, pass them as
 `VAST_API_KEY` and `TAILSCALE_AUTH_KEY` environment variables.
 
 The default maximum Vast price is $0.53 per hour. To use another limit, run
-`sudo systemctl edit qwen-cloud-proxy.service` and add:
+`sudo systemctl edit abliteration-station-proxy.service` and add:
 
 ```ini
 [Service]
@@ -82,22 +85,22 @@ Restart the service after you save the override.
 Start or continue a Pi session:
 
 ```sh
-pi-qwen-cloud
-pi-qwen-cloud --continue
+pi-abliteration-station
+pi-abliteration-station --continue
 ```
 
 If the instance stopped while Pi stayed open, send the next prompt normally.
 The prompt stays queued while the proxy starts the model. The Pi status line
-shows the wake timer. Use `/qwen-wake-status` for more detail.
+shows the wake timer. Use `/abliteration-status` for more detail.
 
 Useful lifecycle commands are:
 
 ```sh
-sudo qwen-cloud doctor
-sudo qwen-cloud status
-sudo qwen-cloud ensure
-sudo qwen-cloud stop
-sudo qwen-cloud-audit
+sudo abliteration-station doctor
+sudo abliteration-station status
+sudo abliteration-station ensure
+sudo abliteration-station stop
+sudo abliteration-station-audit
 ```
 
 `stop` stops compute but keeps the Vast instance and its storage. Vast can

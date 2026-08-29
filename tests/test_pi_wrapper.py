@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 
-WRAPPER = Path(__file__).parents[1] / "scripts" / "pi-qwen-cloud"
+WRAPPER = Path(__file__).parents[1] / "scripts" / "pi-abliteration-station"
 
 
 class PiWrapperTest(unittest.TestCase):
@@ -16,7 +16,7 @@ class PiWrapperTest(unittest.TestCase):
             root = Path(temp)
             log = root / "events"
             curl = root / "curl"
-            qwen_cloud = root / "qwen-cloud"
+            qwen_cloud = root / "abliteration-station"
             pi = root / "pi"
 
             curl.write_text(
@@ -44,10 +44,10 @@ class PiWrapperTest(unittest.TestCase):
             environment.update(
                 {
                     "TEST_LOG": str(log),
-                    "QWEN_CLOUD_CURL": str(curl),
-                    "QWEN_CLOUD_CLI": str(qwen_cloud),
-                    "PI_QWEN_BIN": str(pi),
-                    "QWEN_CLOUD_CONFIG": str(root / "config.json"),
+                    "ABLITERATION_STATION_CURL": str(curl),
+                    "ABLITERATION_STATION_CLI": str(qwen_cloud),
+                    "PI_ABLITERATION_STATION_BIN": str(pi),
+                    "ABLITERATION_STATION_CONFIG": str(root / "config.json"),
                 }
             )
             subprocess.run([str(WRAPPER), "--continue"], env=environment, check=True)

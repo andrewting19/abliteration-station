@@ -1,0 +1,26 @@
+[Unit]
+Description=Abliteration Station demand-start proxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+RuntimeDirectory=abliteration-station
+RuntimeDirectoryMode=0700
+Environment=ABLITERATION_STATION_CONFIG=/etc/abliteration-station/config.json
+Environment=ABLITERATION_STATION_IDLE_SECONDS=600
+Environment=ABLITERATION_STATION_PROXY_PORT=17072
+Environment=ABLITERATION_STATION_ROUTE_FILE=/run/abliteration-station/route.json
+Environment=ABLITERATION_STATION_ACTIVITY_FILE=/run/abliteration-station/activity.json
+Environment=ABLITERATION_STATION_ENSURE_COMMAND=/usr/local/bin/abliteration-station
+ExecStart=/usr/bin/node /usr/local/lib/abliteration-station/idle-proxy.mjs
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/run/abliteration-station /run/lock /var/lib/abliteration-station /root/.ssh /root/.config
+
+[Install]
+WantedBy=multi-user.target

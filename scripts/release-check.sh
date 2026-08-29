@@ -9,13 +9,14 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 
 while IFS= read -r script; do
   bash -n "$script"
-done < <(find scripts -type f -name '*.sh' -o -type f -name 'qwen-vast' -o -type f -name 'qwen-cloud' -o -type f -name 'pi-qwen-cloud' -o -type f -name 'inference-key')
+done < <(find scripts -type f -name '*.sh' -o -type f -name 'qwen-vast' -o -type f -name 'abliteration-station' -o -type f -name 'pi-abliteration-station' -o -type f -name 'inference-key')
 
 node --check scripts/idle-proxy.mjs
-python3 -m pip wheel --no-deps --no-build-isolation --wheel-dir /tmp/qwen-cloud-wheel . >/dev/null
+python3 -m pip wheel --no-deps --no-build-isolation --wheel-dir /tmp/abliteration-station-wheel . >/dev/null
 
 if rg -n --hidden \
   --glob '!scripts/release-check.sh' \
+  --glob '!.git/**' \
   --glob '!**/__pycache__/**' \
   --glob '!*.pyc' \
   '(100\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|andrewting|@gmail\.com|root@kevin|GPUHub|gpuhub|TensorDock|tensordock)' .; then

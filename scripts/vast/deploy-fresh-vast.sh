@@ -11,7 +11,7 @@ usage() {
 SSH_HOST=$1
 SSH_PORT=$2
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-SSH_KEY=${3:-$HOME/.ssh/qwen-cloud-vast}
+SSH_KEY=${3:-$HOME/.ssh/abliteration-station-vast}
 REMOTE_STAGE=/tmp/qwen38-portable
 
 [[ "$SSH_PORT" =~ ^[0-9]+$ ]] || usage
@@ -43,7 +43,7 @@ if [[ -s "$SCRIPT_DIR/cache/$BUILD_CACHE_NAME" && \
 fi
 
 # Copy the local model API key through the private SSH connection.
-INFERENCE_KEY_FILE=${QWEN_CLOUD_INFERENCE_KEY_FILE:-$HOME/.config/qwen-cloud/inference_api_key}
+INFERENCE_KEY_FILE=${ABLITERATION_STATION_INFERENCE_KEY_FILE:-$HOME/.config/abliteration-station/inference_api_key}
 [[ -s "$INFERENCE_KEY_FILE" ]] || {
   echo "Inference key not found: $INFERENCE_KEY_FILE" >&2
   exit 1

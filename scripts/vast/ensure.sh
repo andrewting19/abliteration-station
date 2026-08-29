@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-QWEN_VAST_DIR=${QWEN38_VAST_DIR:-/usr/local/lib/qwen-cloud/vast}
+QWEN_VAST_DIR=${QWEN38_VAST_DIR:-/usr/local/lib/abliteration-station/vast}
 VASTAI="$QWEN_VAST_DIR/.vast-venv/bin/vastai"
 QWEN_VAST="$QWEN_VAST_DIR/qwen-vast"
-INSTANCE_FILE=${QWEN38_INSTANCE_FILE:-/var/lib/qwen-cloud/vast-instance-id}
+INSTANCE_FILE=${QWEN38_INSTANCE_FILE:-/var/lib/abliteration-station/vast-instance-id}
 LIFECYCLE_PROXY_URL=${QWEN38_LIFECYCLE_PROXY_URL:-http://127.0.0.1:17072}
-MODEL_URL=${QWEN38_MODEL_URL:-http://qwen38-vast:17070}
+CONFIG_FILE=${ABLITERATION_STATION_CONFIG:-/etc/abliteration-station/config.json}
+MODEL_URL=${QWEN38_MODEL_URL:-$(jq -r '.providers.vast.upstream' "$CONFIG_FILE")}
 PRICE_CAP=${QWEN38_MAX_DPH:-0.53}
 LOCK_FILE=${QWEN38_ENSURE_LOCK:-/run/lock/qwen38-vast-ensure.lock}
 API_KEY_COMMAND=${QWEN38_API_KEY_COMMAND:-$QWEN_VAST_DIR/inference-key}
 
 die() {
-  echo "Qwen cloud start failed: $*" >&2
+  echo "Abliteration Station start failed: $*" >&2
   exit 1
 }
 

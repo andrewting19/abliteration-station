@@ -5,11 +5,11 @@ import os
 from pathlib import Path
 from typing import Any
 
-DEFAULT_CONFIG = Path("/etc/qwen-cloud/config.json")
+DEFAULT_CONFIG = Path("/etc/abliteration-station/config.json")
 
 
 def load_config(path: str | os.PathLike[str] | None = None) -> dict[str, Any]:
-    selected = Path(path or os.environ.get("QWEN_CLOUD_CONFIG", DEFAULT_CONFIG))
+    selected = Path(path or os.environ.get("ABLITERATION_STATION_CONFIG", DEFAULT_CONFIG))
     with selected.open("r", encoding="utf-8") as handle:
         config = json.load(handle)
     config["_config_path"] = str(selected)

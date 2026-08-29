@@ -14,10 +14,10 @@ MODELS = Path(os.environ.get("PI_CODING_AGENT_DIR", "/root/.pi/agent")) / "model
 def main() -> None:
     value = json.loads(MODELS.read_text(encoding="utf-8")) if MODELS.is_file() else {}
     providers = value.setdefault("providers", {})
-    providers["qwen-cloud"] = {
+    providers["abliteration-station"] = {
         "baseUrl": "http://127.0.0.1:17072/v1",
         "api": "openai-completions",
-        "apiKey": "!/usr/local/lib/qwen-cloud/vast/inference-key",
+        "apiKey": "!/usr/local/lib/abliteration-station/vast/inference-key",
         "authHeader": True,
         "models": [{
             "id": "qwen38-cloud",
@@ -46,7 +46,7 @@ def main() -> None:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     MODELS.parent.mkdir(parents=True, exist_ok=True)
     if MODELS.is_file():
-        shutil.copy2(MODELS, MODELS.with_name(f"models.json.before-qwen-cloud-{stamp}.bak"))
+        shutil.copy2(MODELS, MODELS.with_name(f"models.json.before-abliteration-station-{stamp}.bak"))
     descriptor, temporary = tempfile.mkstemp(prefix="models.", suffix=".json", dir=MODELS.parent)
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as handle:

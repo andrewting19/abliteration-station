@@ -98,16 +98,16 @@ class IdleProxyTest(unittest.TestCase):
         environment = os.environ.copy()
         environment.update(
             {
-                "QWEN_CLOUD_PROXY_HOST": "127.0.0.1",
-                "QWEN_CLOUD_PROXY_PORT": str(self.proxy_port),
-                "QWEN_CLOUD_IDLE_SECONDS": str(idle_seconds),
-                "QWEN_CLOUD_IDLE_POLL_MS": "100",
-                "QWEN_CLOUD_TEST_MODE": "1",
-                "QWEN_CLOUD_ROUTE_FILE": str(route),
-                "QWEN_CLOUD_ACTIVITY_FILE": str(self.root / "activity.json"),
-                "QWEN_CLOUD_ENSURE_COMMAND": str(ensure),
-                "QWEN_CLOUD_STOP_COMMAND": str(stop),
-                "QWEN_CLOUD_CONFIG": str(self.root / "config.json"),
+                "ABLITERATION_STATION_PROXY_HOST": "127.0.0.1",
+                "ABLITERATION_STATION_PROXY_PORT": str(self.proxy_port),
+                "ABLITERATION_STATION_IDLE_SECONDS": str(idle_seconds),
+                "ABLITERATION_STATION_IDLE_POLL_MS": "100",
+                "ABLITERATION_STATION_TEST_MODE": "1",
+                "ABLITERATION_STATION_ROUTE_FILE": str(route),
+                "ABLITERATION_STATION_ACTIVITY_FILE": str(self.root / "activity.json"),
+                "ABLITERATION_STATION_ENSURE_COMMAND": str(ensure),
+                "ABLITERATION_STATION_STOP_COMMAND": str(stop),
+                "ABLITERATION_STATION_CONFIG": str(self.root / "config.json"),
             }
         )
         self.process = subprocess.Popen(

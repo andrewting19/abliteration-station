@@ -4,22 +4,22 @@ import fs from "node:fs";
 import http from "node:http";
 import { spawn } from "node:child_process";
 
-const listenHost = process.env.QWEN_CLOUD_PROXY_HOST ?? "127.0.0.1";
-const listenPort = Number(process.env.QWEN_CLOUD_PROXY_PORT ?? "17071");
-const idleSeconds = Number(process.env.QWEN_CLOUD_IDLE_SECONDS ?? "600");
-const testMode = process.env.QWEN_CLOUD_TEST_MODE === "1";
-const idlePollMs = Number(process.env.QWEN_CLOUD_IDLE_POLL_MS ?? "15000");
-const routeFile = process.env.QWEN_CLOUD_ROUTE_FILE ?? "/run/qwen-cloud/route.json";
-const activityFile = process.env.QWEN_CLOUD_ACTIVITY_FILE ?? "/run/qwen-cloud/activity.json";
-const stopCommand = process.env.QWEN_CLOUD_STOP_COMMAND ?? "/usr/local/bin/qwen-cloud";
-const ensureCommand = process.env.QWEN_CLOUD_ENSURE_COMMAND ?? "/usr/local/bin/qwen-cloud";
-const configFile = process.env.QWEN_CLOUD_CONFIG ?? "/etc/qwen-cloud/config.json";
+const listenHost = process.env.ABLITERATION_STATION_PROXY_HOST ?? "127.0.0.1";
+const listenPort = Number(process.env.ABLITERATION_STATION_PROXY_PORT ?? "17071");
+const idleSeconds = Number(process.env.ABLITERATION_STATION_IDLE_SECONDS ?? "600");
+const testMode = process.env.ABLITERATION_STATION_TEST_MODE === "1";
+const idlePollMs = Number(process.env.ABLITERATION_STATION_IDLE_POLL_MS ?? "15000");
+const routeFile = process.env.ABLITERATION_STATION_ROUTE_FILE ?? "/run/abliteration-station/route.json";
+const activityFile = process.env.ABLITERATION_STATION_ACTIVITY_FILE ?? "/run/abliteration-station/activity.json";
+const stopCommand = process.env.ABLITERATION_STATION_STOP_COMMAND ?? "/usr/local/bin/abliteration-station";
+const ensureCommand = process.env.ABLITERATION_STATION_ENSURE_COMMAND ?? "/usr/local/bin/abliteration-station";
+const configFile = process.env.ABLITERATION_STATION_CONFIG ?? "/etc/abliteration-station/config.json";
 
 if (!Number.isFinite(idleSeconds) || idleSeconds < (testMode ? 1 : 60)) {
-  throw new Error(`QWEN_CLOUD_IDLE_SECONDS must be at least ${testMode ? 1 : 60}`);
+  throw new Error(`ABLITERATION_STATION_IDLE_SECONDS must be at least ${testMode ? 1 : 60}`);
 }
 if (!Number.isFinite(idlePollMs) || idlePollMs < (testMode ? 100 : 1000)) {
-  throw new Error("QWEN_CLOUD_IDLE_POLL_MS is too small");
+  throw new Error("ABLITERATION_STATION_IDLE_POLL_MS is too small");
 }
 
 fs.mkdirSync(new URL(".", `file://${activityFile}`).pathname, { recursive: true });

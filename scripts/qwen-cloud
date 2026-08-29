@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-install_root=${QWEN_CLOUD_INSTALL_ROOT:-/opt/qwen-cloud-lifecycle}
-export PYTHONPATH="$install_root/src"
-exec /usr/bin/python3 -m qwen_lifecycle.cli "$@"

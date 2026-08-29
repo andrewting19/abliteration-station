@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+install_root=${ABLITERATION_STATION_INSTALL_ROOT:-/opt/abliteration-station}
+export PYTHONPATH="$install_root/src"
+exec /usr/bin/python3 -m abliteration_station.cli "$@"

@@ -35,8 +35,8 @@ Tailscale connection.
 ## Files that must stay private
 
 - `/root/.config/vastai/vast_api_key`
-- `/root/.config/qwen-cloud/inference_api_key`
-- `/root/.config/qwen-cloud/tailscale_auth_key`
-- `/var/lib/qwen-cloud/vast-private/tailscaled.state`
-- `/etc/qwen-cloud/config.json` after local changes
+- `/root/.config/abliteration-station/inference_api_key`
+- `/root/.config/abliteration-station/tailscale_auth_key`
+- `/var/lib/abliteration-station/vast-private/tailscaled.state`
+- `/etc/abliteration-station/config.json` after local changes
 - model files, build caches, captured prompts, and provider state
