@@ -55,7 +55,14 @@ gate, but they must not be labeled 120K.
 
 ### DFlash sweep status
 
-The planned `n_max` 4, 5, 7, and 8 sweep did not produce valid results. Idle
-stop ended the first direct run. The server was restored to the accepted
-`n_max=6` setting. Repeat the sweep only with the lifecycle inhibit active and
-the corrected 120K fixture.
+The first sweep attempt was invalid because idle stop ended the direct run.
+The corrected sweep used the lifecycle inhibit and the 117K gate. Its decode
+results were:
+
+- `n_max=4`: 109.0 TPS
+- `n_max=5`: 112.7 TPS
+- `n_max=6`: 119.0 TPS
+- `n_max=7`: 116.5 TPS
+- `n_max=8`: 114.1 TPS
+
+Keep `n_max=6`. It was the fastest value in this bounded sweep.
