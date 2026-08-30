@@ -14,6 +14,7 @@ Environment=ABLITERATION_STATION_PROXY_PORT=17072
 Environment=ABLITERATION_STATION_ROUTE_FILE=/run/abliteration-station/route.json
 Environment=ABLITERATION_STATION_ACTIVITY_FILE=/run/abliteration-station/activity.json
 Environment=ABLITERATION_STATION_ENSURE_COMMAND=/usr/local/bin/abliteration-station
+Environment=TMPDIR=/run/abliteration-station
 ExecStart=/usr/bin/node /usr/local/lib/abliteration-station/idle-proxy.mjs
 Restart=always
 RestartSec=2

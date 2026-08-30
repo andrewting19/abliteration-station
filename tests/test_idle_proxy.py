@@ -16,7 +16,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 
-PROXY = Path(__file__).parents[1] / "scripts" / "idle-proxy.mjs"
+ROOT = Path(__file__).parents[1]
+PROXY = ROOT / "scripts" / "idle-proxy.mjs"
+SERVICE = ROOT / "scripts" / "abliteration-station-proxy.service"
 
 
 def free_port() -> int:
@@ -57,6 +59,11 @@ class UpstreamHandler(BaseHTTPRequestHandler):
 
 @unittest.skipUnless(shutil.which("node"), "Node.js is required")
 class IdleProxyTest(unittest.TestCase):
+    def test_service_has_writable_temporary_directory(self) -> None:
+        unit = SERVICE.read_text(encoding="utf-8")
+        self.assertIn("Environment=TMPDIR=/run/abliteration-station", unit)
+        self.assertIn("RuntimeDirectory=abliteration-station", unit)
+
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
