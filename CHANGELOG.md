@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0 - Unreleased
+
+- Package the integration for installation with `pi install`.
+- Register the provider and model from the Pi extension instead of editing
+  `models.json`.
+- Add Pi commands for setup, model selection, status, wake, stop, and doctor.
+- Keep the root-owned lifecycle proxy as a companion service that survives Pi.
+- Remove copied legacy extensions and provider entries during service upgrade.
+- Keep `pi-abliteration-station` as a compatibility launcher.
+
 ## 0.1.1 - 2026-08-31
 
 - Load provider adapters from configuration without editing the controller.

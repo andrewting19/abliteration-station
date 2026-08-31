@@ -5,7 +5,6 @@ set -euo pipefail
 secret_dir=/root/.config/abliteration-station
 vast_secret_dir=/root/.config/vastai
 vast_root=${ABLITERATION_STATION_VAST_ROOT:-/usr/local/lib/abliteration-station/vast}
-install_root=${ABLITERATION_STATION_INSTALL_ROOT:-/opt/abliteration-station}
 install -d -m 0700 "$secret_dir" "$vast_secret_dir" /root/.ssh
 
 read_secret() {
@@ -32,10 +31,8 @@ if [[ ! -s /root/.ssh/abliteration-station-vast ]]; then
   ssh-keygen -q -t ed25519 -N '' -f /root/.ssh/abliteration-station-vast
 fi
 
-PI_CODING_AGENT_DIR=${PI_CODING_AGENT_DIR:-/root/.pi/agent} \
-  "$install_root/install-pi-provider.py"
 "$vast_root/qwen-vast" help >/dev/null
 python3 /var/lib/abliteration-station/benchmarks/generate.py
 systemctl enable --now abliteration-station-proxy.service
 echo "Configuration is complete."
-echo "Start Pi with: pi-abliteration-station"
+echo "Start Pi normally, then run /abliteration-use once to select the model."

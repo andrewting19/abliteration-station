@@ -20,6 +20,24 @@ elif [[ ${REQUIRE_SHELLCHECK:-0} == 1 ]]; then
 fi
 
 node --check scripts/idle-proxy.mjs
+npm pack --dry-run --json >/tmp/abliteration-station-npm-pack.json
+python3 - <<'PY'
+import json
+from pathlib import Path
+
+pack = json.loads(Path("/tmp/abliteration-station-npm-pack.json").read_text())[0]
+names = {entry["path"] for entry in pack["files"]}
+required = {
+    "package.json",
+    "extensions/abliteration-station.ts",
+    "scripts/install.sh",
+    "scripts/idle-proxy.mjs",
+    "config/example.json",
+}
+missing = sorted(required - names)
+if missing:
+    raise SystemExit(f"Pi package is missing required files: {missing}")
+PY
 python3 -m pip wheel --no-deps --no-build-isolation --wheel-dir /tmp/abliteration-station-wheel . >/dev/null
 
 if rg -n --hidden \
@@ -27,7 +45,7 @@ if rg -n --hidden \
   --glob '!.git/**' \
   --glob '!**/__pycache__/**' \
   --glob '!*.pyc' \
-  '(100\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|andrewting|@gmail\.com|root@kevin)' .; then
+  '(100\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|@gmail\.com|root@kevin)' .; then
   echo "The public-data scan found a blocked value." >&2
   exit 1
 fi

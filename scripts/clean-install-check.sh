@@ -26,6 +26,7 @@ test -x /usr/local/bin/abliteration-station-audit
 test -x /opt/abliteration-station/remove-pi-provider.py
 test -x /usr/local/lib/abliteration-station/vast/qwen-vast
 test -s /etc/abliteration-station/config.json
+test ! -e /root/.pi/agent/extensions/abliteration-station-status.ts
 
 /src/scripts/uninstall.sh
 test ! -e /usr/local/bin/abliteration-station

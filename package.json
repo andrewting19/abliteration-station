@@ -1,0 +1,39 @@
+{
+  "name": "@andrewting19/abliteration-station",
+  "version": "0.2.0",
+  "description": "Private abliterated models on demand for Pi.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/andrewting19/abliteration-station.git"
+  },
+  "keywords": [
+    "pi-package",
+    "pi-agent",
+    "llm",
+    "gpu",
+    "vast-ai"
+  ],
+  "pi": {
+    "extensions": [
+      "./extensions"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "extensions",
+    "scripts",
+    "src",
+    "benchmarks",
+    "config",
+    "docs",
+    "README.md",
+    "LICENSE",
+    "pyproject.toml"
+  ]
+}

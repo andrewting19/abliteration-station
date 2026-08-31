@@ -8,7 +8,8 @@ OpenAI-compatible Qwen model on a rented Vast.ai GPU. It starts compute on
 demand, keeps an open Pi session usable after idle shutdown, and stops paid GPU
 compute after ten minutes without an inference request.
 
-Version 0.1 is an alpha release. It has a configurable provider adapter and
+Version 0.2 is an alpha release. It is an official Pi package with a
+configurable provider adapter and
 model profile boundary, but supports one fully tested deployment profile:
 
 - Qwen3.8-27B Unleashed `Q3_K_XL`;
@@ -59,10 +60,17 @@ A retained Vast instance normally starts much faster.
 
 ## Install
 
-Clone the repository on the Pi client server. Then run:
+Install the package from GitHub:
 
 ```sh
-sudo ./scripts/install.sh
+pi install git:github.com/andrewting19/abliteration-station@v0.2.0
+```
+
+Start Pi and run `/abliteration-setup`. On a root-based Pi server, this
+installs the durable local service directly. On other systems, Pi shows the
+exact one-time `sudo` command. Then add the two private service keys:
+
+```sh
 sudo abliteration-station-configure
 sudo abliteration-station-audit
 ```
@@ -83,16 +91,30 @@ Restart the service after you save the override.
 
 ## Use with Pi
 
-Start or continue a Pi session:
+Start or continue a normal Pi session:
 
 ```sh
-pi-abliteration-station
-pi-abliteration-station --continue
+pi
+pi --continue
 ```
+
+Run `/abliteration-use` once to select Qwen with native medium thinking. Pi
+retains the selected model. You can also select
+`abliteration-station/qwen38-cloud` from Pi's model picker.
 
 If the instance stopped while Pi stayed open, send the next prompt normally.
 The prompt stays queued while the proxy starts the model. The Pi status line
-shows the wake timer. Use `/abliteration-status` for more detail.
+shows the wake timer. The package supplies these commands:
+
+- `/abliteration-use`: select Qwen and medium thinking;
+- `/abliteration-status`: show route, request, and idle state;
+- `/abliteration-wake`: start the retained GPU before a prompt;
+- `/abliteration-stop`: stop paid compute but keep retained storage;
+- `/abliteration-doctor`: check the lifecycle installation;
+- `/abliteration-setup`: install or upgrade the companion service.
+
+The old `pi-abliteration-station` launcher remains as a compatibility command.
+New installations do not need it.
 
 Useful lifecycle commands are:
 
@@ -140,7 +162,7 @@ The default test does not rent a GPU. The paid hardware acceptance test is in
 
 ## Limits
 
-- Version 0.1 supports only Vast.ai and one RTX 5090 profile.
+- Version 0.2 supports only Vast.ai and one RTX 5090 profile.
 - The installer supports root-based Linux systems with systemd.
 - A fresh host performs a source build. There is no public binary build cache.
 - One model slot is configured. Parallel long-context requests compete for it.

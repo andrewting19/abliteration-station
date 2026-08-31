@@ -15,7 +15,8 @@ rm -f /etc/systemd/system/abliteration-station-proxy.service \
   /usr/local/bin/abliteration-station /usr/local/bin/pi-abliteration-station \
   /usr/local/bin/abliteration-station-audit \
   /usr/local/bin/abliteration-station-configure \
-  /root/.pi/agent/extensions/abliteration-station-status.ts
+  /root/.pi/agent/extensions/abliteration-station-status.ts \
+  /root/.pi/agent/extensions/qwen-cloud-wake-status.ts
 rm -rf /usr/local/lib/abliteration-station /opt/abliteration-station
 systemctl daemon-reload
 echo "Removed Abliteration Station programs, Pi registration, code, and service."

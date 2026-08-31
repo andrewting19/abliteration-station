@@ -1,5 +1,8 @@
 # Architecture
 
+The Pi-facing distribution is an official Pi package. The durable lifecycle
+process remains a root-owned companion service. See [PI_PACKAGE.md](PI_PACKAGE.md).
+
 ## Request path
 
 ```text
