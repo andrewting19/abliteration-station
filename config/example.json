@@ -2,7 +2,7 @@
   "provider_order": ["vast"],
   "fallback_on_runtime_failure": true,
   "ensure_lock_file": "/run/lock/abliteration-station-ensure.lock",
-  "ensure_lock_timeout_seconds": 1800,
+  "ensure_lock_timeout_seconds": 7200,
   "route_file": "/run/abliteration-station/route.json",
   "inference_key_file": "/root/.config/abliteration-station/inference_api_key",
   "chat_gate_timeout_seconds": 180,
@@ -21,7 +21,7 @@
       "instance_file": "/var/lib/abliteration-station/vast-instance-id",
       "lifecycle_token_file": "/root/.config/vastai/vast_api_key",
       "upstream": "http://qwen38-vast:17070",
-      "start_timeout_seconds": 1800
+      "start_timeout_seconds": 7200
     }
   }
 }

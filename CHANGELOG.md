@@ -13,6 +13,8 @@
   replacement.
 - Exclude each failed live offer during one rental sweep so retries do not
   select the same unavailable offer.
+- Allow up to two hours for a verified fresh bootstrap. Large model downloads
+  must not be killed by the former 30-minute controller timeout.
 
 ## 0.1.1 - 2026-08-31
 

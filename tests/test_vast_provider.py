@@ -7,6 +7,8 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from abliteration_station.providers.vast import VastProvider
 
@@ -14,6 +16,28 @@ ROOT = Path(__file__).parents[1]
 
 
 class VastProviderTest(unittest.TestCase):
+    def test_ensure_default_timeout_allows_a_fresh_bootstrap(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            command = root / "ensure"
+            command.write_text("#!/bin/sh\n", encoding="utf-8")
+            instance_file = root / "instance"
+            instance_file.write_text("12345\n", encoding="utf-8")
+            provider = VastProvider(
+                {
+                    "ensure_command": str(command),
+                    "instance_file": str(instance_file),
+                    "lifecycle_token_file": str(root / "token"),
+                    "upstream": "http://model.test",
+                }
+            )
+            with patch(
+                "abliteration_station.providers.vast.subprocess.run",
+                return_value=SimpleNamespace(returncode=0),
+            ) as run:
+                provider.ensure()
+            self.assertEqual(run.call_args.kwargs["timeout"], 7200)
+
     def test_ensure_streams_progress_to_stderr(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

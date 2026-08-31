@@ -39,7 +39,7 @@ class VastProvider:
             text=True,
             stdout=sys.stderr,
             stderr=sys.stderr,
-            timeout=float(self.config.get("start_timeout_seconds", 1800)),
+            timeout=float(self.config.get("start_timeout_seconds", 7200)),
         )
         if result.returncode:
             raise LifecycleError(

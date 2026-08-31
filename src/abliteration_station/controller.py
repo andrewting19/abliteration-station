@@ -59,7 +59,7 @@ class Controller:
         lock_file = Path(self.config.get("ensure_lock_file", "/run/lock/abliteration-station-ensure.lock"))
         lock_file.parent.mkdir(parents=True, exist_ok=True)
         handle = lock_file.open("a+", encoding="utf-8")
-        deadline = time.monotonic() + float(self.config.get("ensure_lock_timeout_seconds", 1800))
+        deadline = time.monotonic() + float(self.config.get("ensure_lock_timeout_seconds", 7200))
         while True:
             try:
                 fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)

@@ -1,11 +1,22 @@
 from __future__ import annotations
 
 import unittest
+import json
+from pathlib import Path
 
 from abliteration_station.config import validate_config
 
 
 class ConfigTest(unittest.TestCase):
+    def test_example_allows_two_hours_for_a_fresh_bootstrap(self) -> None:
+        config = json.loads(
+            (Path(__file__).parents[1] / "config" / "example.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(config["ensure_lock_timeout_seconds"], 7200)
+        self.assertEqual(config["providers"]["vast"]["start_timeout_seconds"], 7200)
+
     def test_declarative_provider_and_model_profile(self) -> None:
         validate_config(
             {

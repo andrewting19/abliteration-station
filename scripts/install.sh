@@ -40,6 +40,7 @@ install -m 0755 "$source_dir/scripts/configure.sh" /usr/local/bin/abliteration-s
 install -m 0755 "$source_dir/scripts/uninstall.sh" "$install_root/uninstall.sh"
 install -m 0755 "$source_dir/scripts/install-pi-provider.py" "$install_root/install-pi-provider.py"
 install -m 0755 "$source_dir/scripts/remove-pi-provider.py" "$install_root/remove-pi-provider.py"
+install -m 0755 "$source_dir/scripts/migrate-config.py" "$install_root/migrate-config.py"
 install -m 0755 "$vast_root/ensure.sh" "$vast_root/ensure"
 install -m 0755 "$source_dir/scripts/idle-proxy.mjs" /usr/local/lib/abliteration-station/idle-proxy.mjs
 install -m 0644 "$source_dir/scripts/abliteration-station-proxy.service" \
@@ -47,6 +48,8 @@ install -m 0644 "$source_dir/scripts/abliteration-station-proxy.service" \
 
 if [[ ! -s /etc/abliteration-station/config.json ]]; then
   install -m 0600 "$source_dir/config/example.json" /etc/abliteration-station/config.json
+else
+  "$install_root/migrate-config.py" /etc/abliteration-station/config.json
 fi
 
 # Version 0.2 registers the provider from its Pi package. Remove the old copied

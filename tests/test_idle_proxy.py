@@ -158,6 +158,19 @@ class IdleProxyTest(unittest.TestCase):
         body = json.loads(caught.exception.read())
         self.assertIn("model wake failed", body["error"]["message"])
 
+    def test_healthy_route_clears_reported_wake_error(self) -> None:
+        self.start_proxy(ensure_exit=7)
+        with self.assertRaises(urllib.error.HTTPError):
+            self.request()
+        route = self.root / "route.json"
+        route.write_text(
+            json.dumps({"provider": "fake", "upstream": f"http://127.0.0.1:{self.upstream.server_port}", "identity": {}}),
+            encoding="utf-8",
+        )
+        with urllib.request.urlopen(f"http://127.0.0.1:{self.proxy_port}/healthz", timeout=2) as response:
+            health = json.load(response)
+        self.assertIsNone(health["last_wake_error"])
+
     def test_metrics_record_timing_without_request_or_response_content(self) -> None:
         self.start_proxy()
         self.assertEqual(self.request(), {"ok": True})

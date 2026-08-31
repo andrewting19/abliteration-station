@@ -22,9 +22,11 @@ for required in "$VASTAI" "$QWEN_VAST" "$API_KEY_COMMAND"; do
 done
 [[ "$PRICE_CAP" =~ ^[0-9]+([.][0-9]+)?$ ]] || die "QWEN38_MAX_DPH must be numeric"
 
+ensure_lock_timeout_seconds=${QWEN38_ENSURE_LOCK_TIMEOUT_SECONDS:-7200}
 exec 9>"$LOCK_FILE"
 echo "Checking the private Qwen server..." >&2
-flock -w 1800 9 || die "another start operation did not finish within 30 minutes"
+flock -w "$ensure_lock_timeout_seconds" 9 ||
+  die "another start operation did not finish within ${ensure_lock_timeout_seconds} seconds"
 
 curl -fsS -X POST "$LIFECYCLE_PROXY_URL/lifecycle/inhibit?seconds=7200" >/dev/null ||
   die "the local Qwen idle controller is not available"

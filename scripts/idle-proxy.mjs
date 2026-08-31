@@ -50,7 +50,7 @@ function writeState() {
     inhibit_until_unix_ms: inhibitUntilMs || null,
     stopped_for_activity_unix_ms: stoppedActivityMs,
     wake_in_flight: ensureInFlight !== null,
-    last_wake_error: lastWakeError,
+    last_wake_error: fs.existsSync(routeFile) ? null : lastWakeError,
     route: fs.existsSync(routeFile) ? readRoute() : null,
   })}\n`, { mode: 0o600 });
   fs.renameSync(temporary, activityFile);
@@ -86,7 +86,9 @@ function stopIdleProvider(snapshot) {
 
 async function ensureRoute() {
   try {
-    return readRoute();
+    const route = readRoute();
+    lastWakeError = null;
+    return route;
   } catch {
     // Continue to the serialized wake path.
   }
