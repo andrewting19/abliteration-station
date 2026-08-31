@@ -29,7 +29,10 @@ is connected to the same tailnet. Run `tailscale status` and look for
 
 This is expected. A fresh host downloads and verifies the model files, builds a
 pinned CUDA runtime, quantizes the draft model, and runs a long-context speed
-test. Keep the Vast instance stopped instead of deleting it if you want the
+test. The launcher prints each provider stage to the terminal. If there is no
+new output for five minutes, inspect the service journal and Vast instance
+state with the commands above. Keep the Vast instance stopped instead of
+deleting it if you want the
 faster retained-instance start path. Retained storage can still cost money.
 
 ## The long-context speed gate fails

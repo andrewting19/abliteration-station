@@ -1,0 +1,32 @@
+name: Feature request
+description: Propose a provider, model profile, lifecycle, or Pi integration change.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation plan
+      description: Include quality, cost, security, and failure tests where applicable.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety
+      options:
+        - label: This proposal does not include credentials, private addresses, prompts, transcripts, or model weights.
+          required: true

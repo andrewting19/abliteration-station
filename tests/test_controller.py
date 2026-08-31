@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from abliteration_station.controller import Controller
+from abliteration_station.controller import Controller, make_provider
 from abliteration_station.errors import LifecycleError, ProviderUnavailable
 from abliteration_station.providers.base import Route
 
@@ -32,6 +32,23 @@ class FakeProvider:
 
 
 class ControllerTest(unittest.TestCase):
+    def test_provider_adapter_loads_from_configuration(self):
+        provider = make_provider(
+            "custom",
+            {
+                "providers": {
+                    "custom": {
+                        "adapter": "abliteration_station.providers.vast:VastProvider",
+                        "ensure_command": "/tmp/ensure",
+                        "instance_file": "/tmp/instance",
+                        "lifecycle_token_file": "/tmp/token",
+                        "upstream": "http://model.test",
+                    }
+                }
+            },
+        )
+        self.assertEqual(provider.name, "vast")
+
     def test_unavailable_primary_falls_back(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

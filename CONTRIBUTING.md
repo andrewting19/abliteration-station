@@ -12,3 +12,5 @@ Thank you for helping.
 Version 0.1 supports only the documented Vast RTX 5090 profile. Mark support for
 another provider or GPU as experimental until it passes the full validation
 gate.
+
+Provider adapters and model profiles must follow [docs/EXTENDING.md](docs/EXTENDING.md).

@@ -15,7 +15,7 @@ def parser() -> argparse.ArgumentParser:
     commands = root.add_subparsers(dest="command", required=True)
     commands.add_parser("ensure", help="Start the first usable provider and run model gates")
     stop = commands.add_parser("stop", help="Stop the active provider without deleting persistent data")
-    stop.add_argument("--provider", choices=["vast"])
+    stop.add_argument("--provider", help="Configured provider name")
     commands.add_parser("status", help="Show provider and route state")
     commands.add_parser("doctor", help="Show missing configuration without starting compute")
     return root

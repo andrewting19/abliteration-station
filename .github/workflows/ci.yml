@@ -19,6 +19,17 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: "20"
-      - run: sudo apt-get update && sudo apt-get install -y jq
+      - run: sudo apt-get update && sudo apt-get install -y jq shellcheck
       - run: chmod +x scripts/release-check.sh
-      - run: ./scripts/release-check.sh
+      - run: REQUIRE_SHELLCHECK=1 ./scripts/release-check.sh
+      - run: ./scripts/clean-install-check.sh
+
+  secrets:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

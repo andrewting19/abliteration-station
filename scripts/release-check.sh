@@ -11,6 +11,14 @@ while IFS= read -r script; do
   bash -n "$script"
 done < <(find scripts -type f -name '*.sh' -o -type f -name 'qwen-vast' -o -type f -name 'abliteration-station' -o -type f -name 'pi-abliteration-station' -o -type f -name 'inference-key')
 
+if command -v shellcheck >/dev/null 2>&1; then
+  mapfile -t shell_files < <(find scripts -type f \( -name '*.sh' -o -name 'qwen-vast' -o -name 'abliteration-station' -o -name 'pi-abliteration-station' -o -name 'inference-key' \))
+  shellcheck --severity=warning "${shell_files[@]}"
+elif [[ ${REQUIRE_SHELLCHECK:-0} == 1 ]]; then
+  echo "ShellCheck is required but not installed." >&2
+  exit 1
+fi
+
 node --check scripts/idle-proxy.mjs
 python3 -m pip wheel --no-deps --no-build-isolation --wheel-dir /tmp/abliteration-station-wheel . >/dev/null
 

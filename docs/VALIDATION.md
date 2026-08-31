@@ -9,6 +9,9 @@
 - Pi wrapper hold and release order;
 - Python, Node.js, and shell syntax;
 - package build;
+- ShellCheck in CI;
+- clean Ubuntu install and uninstall in a container;
+- full-history Gitleaks scanning in CI;
 - scans for private addresses, credentials, personal host names, and artifacts.
 
 ## Paid hardware gate
@@ -24,10 +27,11 @@ The first fresh host must pass these checks before the controller records it:
 
 ## Reference acceptance result
 
-The original deployment passed real Pi tool use, cancellation, idle stop, and
-a 120,844-token workload. It reached 84.62 decode tokens per second for a
-2,048-token output. The retained-instance path reached the model in about 47
-seconds. Results vary by host.
+The corrected reference gate passed real Pi tool use, cancellation, idle stop,
+and a 117,046-token workload. It reached 119.0 decode tokens per second. A
+239,310-token near-limit run reached 83.1 decode tokens per second. The
+retained-instance path has reached the model in about 30 to 47 seconds when
+Vast can return the same GPU. Results vary by host.
 
 ## Release boundary
 

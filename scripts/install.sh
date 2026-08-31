@@ -39,6 +39,7 @@ install -m 0755 "$source_dir/scripts/audit.sh" /usr/local/bin/abliteration-stati
 install -m 0755 "$source_dir/scripts/configure.sh" /usr/local/bin/abliteration-station-configure
 install -m 0755 "$source_dir/scripts/uninstall.sh" "$install_root/uninstall.sh"
 install -m 0755 "$source_dir/scripts/install-pi-provider.py" "$install_root/install-pi-provider.py"
+install -m 0755 "$source_dir/scripts/remove-pi-provider.py" "$install_root/remove-pi-provider.py"
 install -m 0755 "$vast_root/ensure.sh" "$vast_root/ensure"
 install -m 0644 "$source_dir/scripts/abliteration-station-status.ts" \
   /root/.pi/agent/extensions/abliteration-station-status.ts

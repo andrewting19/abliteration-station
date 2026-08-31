@@ -30,7 +30,7 @@ if [[ ! -d "$LLAMA_DIR/.git" ]]; then
     https://github.com/ggml-org/llama.cpp.git "$LLAMA_DIR"
 fi
 
-CURRENT_TREE=$(git -C "$LLAMA_DIR" rev-parse HEAD^{tree} 2>/dev/null || true)
+CURRENT_TREE=$(git -C "$LLAMA_DIR" rev-parse 'HEAD^{tree}' 2>/dev/null || true)
 if [[ "$CURRENT_TREE" != "$QWEN38_LLAMA_EXPECTED_TREE" ]]; then
   git -C "$LLAMA_DIR" checkout --detach "$QWEN38_LLAMA_BASE_COMMIT"
   git -C "$LLAMA_DIR" fetch origin "$QWEN38_DFLASH_COMMIT"
@@ -40,7 +40,7 @@ if [[ "$CURRENT_TREE" != "$QWEN38_LLAMA_EXPECTED_TREE" ]]; then
     cherry-pick FETCH_HEAD
 fi
 
-CURRENT_TREE=$(git -C "$LLAMA_DIR" rev-parse HEAD^{tree})
+CURRENT_TREE=$(git -C "$LLAMA_DIR" rev-parse 'HEAD^{tree}')
 if [[ "$CURRENT_TREE" != "$QWEN38_LLAMA_EXPECTED_TREE" ]]; then
   echo "Unexpected llama.cpp tree after build preparation: $CURRENT_TREE" >&2
   exit 1

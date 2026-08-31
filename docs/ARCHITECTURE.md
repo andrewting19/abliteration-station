@@ -27,7 +27,7 @@ the Node.js proxy prevents duplicate wake operations for concurrent requests.
 
 ## Acceptance gates
 
-Every route must report these values:
+For the included profile, every route must report these configured values:
 
 - model ID `qwen38-cloud`;
 - context size 262,144;
@@ -46,6 +46,7 @@ again and then continues automatically.
 
 ## Provider contract
 
-A provider implements `doctor`, `ensure`, `stop`, and `status`. `ensure` returns
-an endpoint and a non-secret machine identity. `stop` must stop paid compute
-without deleting retained model data.
+A provider implements `doctor`, `ensure`, `stop`, and `status`. Its
+`module:Class` adapter is selected by configuration. `ensure` returns an
+endpoint and a non-secret machine identity. `stop` must stop paid compute
+without deleting retained model data. See [EXTENDING.md](EXTENDING.md).

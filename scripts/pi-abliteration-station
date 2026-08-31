@@ -12,6 +12,7 @@ if [[ -z "$pi_bin" ]]; then
   done
 fi
 bootstrap_hold_seconds=${ABLITERATION_STATION_BOOTSTRAP_HOLD_SECONDS:-1800}
+model_id=$(jq -er '.model.id' "$config")
 inhibit_active=0
 
 [[ -n "$pi_bin" && -x "$pi_bin" ]] || {
@@ -43,6 +44,6 @@ trap - EXIT
 
 "$pi_bin" \
   --provider abliteration-station \
-  --model qwen38-cloud \
+  --model "$model_id" \
   --thinking medium \
   "$@"

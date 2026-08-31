@@ -9,9 +9,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 MODELS = Path(os.environ.get("PI_CODING_AGENT_DIR", "/root/.pi/agent")) / "models.json"
+CONFIG = Path(os.environ.get("ABLITERATION_STATION_CONFIG", "/etc/abliteration-station/config.json"))
 
 
 def main() -> None:
+    config = json.loads(CONFIG.read_text(encoding="utf-8"))
+    model = config["model"]
+    model_id = model["id"]
+    context_size = int(model["context_size"])
     value = json.loads(MODELS.read_text(encoding="utf-8")) if MODELS.is_file() else {}
     providers = value.setdefault("providers", {})
     providers["abliteration-station"] = {
@@ -20,16 +25,16 @@ def main() -> None:
         "apiKey": "!/usr/local/lib/abliteration-station/vast/inference-key",
         "authHeader": True,
         "models": [{
-            "id": "qwen38-cloud",
-            "name": "Qwen3.8 27B Unleashed Q3 + DFlash2",
+            "id": model_id,
+            "name": model.get("display_name", model_id),
             "reasoning": True,
             "thinkingLevelMap": {
                 "minimal": "low", "low": "low", "medium": "medium",
                 "high": "xhigh", "xhigh": "xhigh", "max": "xhigh",
             },
             "input": ["text"],
-            "contextWindow": 262144,
-            "maxTokens": 262144,
+            "contextWindow": context_size,
+            "maxTokens": context_size,
             "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0},
             "compat": {
                 "supportsFinishReason": False,

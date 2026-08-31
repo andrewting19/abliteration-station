@@ -1,0 +1,49 @@
+name: Bug report
+description: Report a reproducible lifecycle, Pi, or inference problem.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include API keys, Tailscale state, private addresses, prompts, or transcripts.
+  - type: input
+    id: revision
+    attributes:
+      label: Revision
+      description: Git commit or release tag.
+    validations:
+      required: true
+  - type: dropdown
+    id: stage
+    attributes:
+      label: First failing stage
+      options:
+        - Install or configure
+        - Provider selection or rental
+        - Host bootstrap
+        - Model acceptance gate
+        - Private route
+        - Pi request
+        - Idle stop or wake
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and sanitized evidence
+      description: Remove credentials, private addresses, prompts, and transcripts.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Client OS, provider, GPU, CPU, and relevant versions.
+    validations:
+      required: true

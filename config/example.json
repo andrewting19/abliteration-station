@@ -8,6 +8,7 @@
   "chat_gate_timeout_seconds": 180,
   "model": {
     "id": "qwen38-cloud",
+    "display_name": "Qwen3.8 27B Unleashed Q3 + DFlash2",
     "context_size": 262144,
     "quant_prefix": "Q3_K",
     "temperature": 1.0,
@@ -15,6 +16,7 @@
   },
   "providers": {
     "vast": {
+      "adapter": "abliteration_station.providers.vast:VastProvider",
       "ensure_command": "/usr/local/lib/abliteration-station/vast/ensure",
       "instance_file": "/var/lib/abliteration-station/vast-instance-id",
       "lifecycle_token_file": "/root/.config/vastai/vast_api_key",

@@ -39,6 +39,9 @@ class PiWrapperTest(unittest.TestCase):
             )
             for command in (curl, qwen_cloud, pi):
                 command.chmod(0o700)
+            (root / "config.json").write_text(
+                '{"model":{"id":"custom-model"}}\n', encoding="utf-8"
+            )
 
             environment = os.environ.copy()
             environment.update(

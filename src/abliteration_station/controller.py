@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import fcntl
+import importlib
 import time
 import urllib.error
 import urllib.request
@@ -11,14 +12,28 @@ from typing import Any
 from .config import atomic_json, read_secret
 from .errors import LifecycleError, ProviderUnavailable
 from .providers.base import Provider, Route
-from .providers.vast import VastProvider
+
+BUILTIN_ADAPTERS = {
+    "vast": "abliteration_station.providers.vast:VastProvider",
+}
 
 
 def make_provider(name: str, config: dict[str, Any]) -> Provider:
     provider_config = config.get("providers", {}).get(name, {})
-    if name == "vast":
-        return VastProvider(provider_config)
-    raise ProviderUnavailable(f"unknown provider: {name}")
+    adapter = provider_config.get("adapter") or BUILTIN_ADAPTERS.get(name)
+    if not adapter or not isinstance(adapter, str) or ":" not in adapter:
+        raise ProviderUnavailable(f"provider {name} has no valid adapter")
+    module_name, class_name = adapter.split(":", 1)
+    try:
+        module = importlib.import_module(module_name)
+        provider_class = getattr(module, class_name)
+        provider = provider_class(provider_config)
+    except (ImportError, AttributeError, TypeError) as error:
+        raise ProviderUnavailable(f"provider {name} adapter {adapter} could not load: {error}") from error
+    for method in ("doctor", "ensure", "stop", "status"):
+        if not callable(getattr(provider, method, None)):
+            raise ProviderUnavailable(f"provider {name} adapter is missing {method}()")
+    return provider
 
 
 class Controller:

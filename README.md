@@ -8,7 +8,8 @@ OpenAI-compatible Qwen model on a rented Vast.ai GPU. It starts compute on
 demand, keeps an open Pi session usable after idle shutdown, and stops paid GPU
 compute after ten minutes without an inference request.
 
-Version 0.1 is an alpha release. It supports one tested deployment profile:
+Version 0.1 is an alpha release. It has a configurable provider adapter and
+model profile boundary, but supports one fully tested deployment profile:
 
 - Qwen3.8-27B Unleashed `Q3_K_XL`;
 - Qwen3.8-27B DFlash2 `Q4_0` draft decoding;
@@ -109,11 +110,13 @@ longer need it.
 
 ## Measured reference result
 
-The accepted reference host used an RTX 5090, a modern Ryzen CPU, at least 48 GB
-of system RAM, and high PCIe bandwidth. A 120,844-token prompt with a
-2,048-token output reached 84.62 decode tokens per second. A retained-host cold
-start reached the model in about 47 seconds. These results are not guarantees.
-Host CPU, PCIe, disk, network, and current Vast capacity can change them.
+The accepted reference host used an RTX 5090, at least 48 GB of system RAM, and
+a qualified CPU and PCIe path. The corrected 117,046-token gate reached 119.0
+decode tokens per second. A separate 239,310-token near-limit gate reached 83.1
+decode tokens per second. A retained-host cold start has reached the model in
+about 30 to 47 seconds when Vast can return the same GPU. These results are not
+guarantees. Host CPU, PCIe, disk, network, and current Vast capacity can change
+them.
 
 ## Security
 
@@ -145,6 +148,8 @@ The default test does not rent a GPU. The paid hardware acceptance test is in
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for more detail.
+Forks that add a provider or model profile must follow
+[docs/EXTENDING.md](docs/EXTENDING.md).
 
 Cost and speed work must use the [measurement contract](docs/MEASUREMENT.md).
 Future ideas are in the [experiment backlog](docs/EXPERIMENT_BACKLOG.md), and
