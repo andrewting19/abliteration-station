@@ -2,7 +2,7 @@
 
 ## Supported version
 
-Only the latest tagged release is supported. Version 0.1 is alpha software.
+Only the latest tagged release is supported. Version 0.2 is alpha software.
 
 ## Report a vulnerability
 
