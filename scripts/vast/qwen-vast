@@ -79,6 +79,7 @@ ssh_url() {
 wait_ssh() {
   local instance_id=$1
   local poll_seconds=${QWEN38_SSH_POLL_SECONDS:-10}
+  local stopped_start_grace_seconds=${QWEN38_STOPPED_START_GRACE_SECONDS:-300}
   local deadline=$((SECONDS + 900))
   local instance_json host port actual_status intended_status running_since=0 stopped_since=0
   while (( SECONDS < deadline )); do
@@ -104,8 +105,8 @@ wait_ssh() {
     fi
     if [[ "$actual_status" == "exited" && "$intended_status" == "stopped" ]]; then
       (( stopped_since == 0 )) && stopped_since=$SECONDS
-      if (( SECONDS - stopped_since >= 90 )); then
-        die "Vast instance $instance_id remained stopped for 90 seconds after its start request"
+      if (( SECONDS - stopped_since >= stopped_start_grace_seconds )); then
+        die "Vast instance $instance_id remained stopped for ${stopped_start_grace_seconds} seconds after its start request"
       fi
     else
       stopped_since=0
@@ -450,6 +451,11 @@ rent_best() {
       return 0
     fi
     echo "Offer $offer_id was not secured: $result" >&2
+    if [[ -n "$excluded_offer_ids" ]]; then
+      excluded_offer_ids+=",$offer_id"
+    else
+      excluded_offer_ids=$offer_id
+    fi
     sleep 1
   done
   die "No offer could be secured after 20 fresh attempts"

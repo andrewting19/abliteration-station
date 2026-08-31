@@ -9,6 +9,10 @@
 - Keep the root-owned lifecycle proxy as a companion service that survives Pi.
 - Remove copied legacy extensions and provider entries during service upgrade.
 - Keep `pi-abliteration-station` as a compatibility launcher.
+- Allow five minutes for a stopped Vast host to enter its restart path before
+  replacement.
+- Exclude each failed live offer during one rental sweep so retries do not
+  select the same unavailable offer.
 
 ## 0.1.1 - 2026-08-31
 
