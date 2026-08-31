@@ -49,10 +49,14 @@ For each release, test the package from its exact Git commit:
 7. After paid compute stops, a prompt in an open Pi session starts the retained
    GPU and returns output without a Pi restart.
 
-Commit `617544324899a6c4694c59c7360105f64c905205` passed items 1 through 6.
+Commit `da334d48da973e1608d30213692da860b81f17c6` passed all seven items.
 The real request returned `PACKAGE_OK`. The bounded cancellation request was
-recorded as cancelled after 3.34 seconds. Item 7 must pass before the v0.2.0
-tag is released.
+recorded as cancelled after 3.34 seconds. The final retained wake used the same
+open Pi process and the same Vast instance. Pi showed the queued prompt and
+returned `FINAL_RETAINED_WAKE_OK`. The proxy measured 46.60 seconds to restore
+the route and 52.49 seconds for the full request. The resumed short decode ran
+at 216.22 tokens per second. The 117,046-token acceptance gate on this host ran
+at 112.60 decode tokens per second.
 
 ## Release boundary
 

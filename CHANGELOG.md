@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 - Unreleased
+## 0.2.0 - 2026-08-31
 
 - Package the integration for installation with `pi install`.
 - Register the provider and model from the Pi extension instead of editing
@@ -15,6 +15,8 @@
   select the same unavailable offer.
 - Allow up to two hours for a verified fresh bootstrap. Large model downloads
   must not be killed by the former 30-minute controller timeout.
+- Clear old wake errors when a healthy route is available and migrate the old
+  timeout defaults during an upgrade.
 
 ## 0.1.1 - 2026-08-31
 
