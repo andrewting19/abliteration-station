@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -36,12 +37,15 @@ class VastProvider:
         result = subprocess.run(
             [self.config["ensure_command"]],
             text=True,
-            capture_output=True,
+            stdout=sys.stderr,
+            stderr=sys.stderr,
             timeout=float(self.config.get("start_timeout_seconds", 1800)),
         )
         if result.returncode:
-            detail = (result.stderr or result.stdout)[-2000:]
-            raise LifecycleError(f"Vast ensure command failed: {detail}")
+            raise LifecycleError(
+                f"Vast ensure command exited with status {result.returncode}; "
+                "see the progress output above"
+            )
         instance_id = Path(self.config["instance_file"]).read_text(encoding="utf-8").strip()
         return Route(self.name, self.config["upstream"].rstrip("/"), {"instance_id": instance_id})
 
