@@ -201,8 +201,9 @@ for rental_attempt in 1 2 3; do
     if model_is_ready && chat_is_ready; then
       echo "Fresh Qwen instance $new_instance_id passed the Q3/262K chat gate." >&2
       "$PROGRESS_COMMAND" ready "Qwen is ready on the replacement GPU" 0 "$new_instance_id"
+      install -d -m 0700 /var/lib/abliteration-station/performance-gates
       nohup "$DEFERRED_GATE_COMMAND" "$new_instance_id" \
-        >"/var/log/abliteration-station-gate-$new_instance_id.log" 2>&1 </dev/null &
+        >"/var/lib/abliteration-station/performance-gates/runner-$new_instance_id.log" 2>&1 </dev/null &
       if [[ -n "$old_instance_id" ]]; then
         echo "Removing replaced instance $old_instance_id to stop its storage charge." >&2
         $VASTAI destroy instance "$old_instance_id" --yes --raw >/dev/null 2>&1 ||

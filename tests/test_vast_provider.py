@@ -37,6 +37,10 @@ class VastProviderTest(unittest.TestCase):
             '[[ -n "$old_instance_id" && "$USE_PROVIDER_COPY" == 1 ]]', ensure
         )
         self.assertIn("abliteration-station-deferred-gate", ensure)
+        self.assertIn(
+            "/var/lib/abliteration-station/performance-gates/runner-", ensure
+        )
+        self.assertNotIn("/var/log/abliteration-station-gate-", ensure)
         self.assertNotIn('"$QWEN_VAST" performance-gate "$new_instance_id"', ensure)
 
     def test_ensure_default_timeout_allows_a_fresh_bootstrap(self) -> None:
