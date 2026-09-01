@@ -250,8 +250,10 @@ class VastProviderTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("QWEN38_STOPPED_START_GRACE_SECONDS:-45", script)
+        self.assertIn("QWEN38_FRESH_HOST_GRACE_SECONDS:-300", script)
         self.assertIn("QWEN38_RETAINED_START=1", script)
         self.assertIn("did not return the retained GPU within", script)
+        self.assertIn("did not expose the fresh container within", script)
         self.assertIn("provider_image", script)
         self.assertIn("provider_ssh", script)
         self.assertIn("copy did not finish within 15 minutes", script)
