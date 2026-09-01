@@ -11,7 +11,7 @@ WRAPPER = Path(__file__).parents[1] / "scripts" / "pi-abliteration-station"
 
 
 class PiWrapperTest(unittest.TestCase):
-    def test_bootstrap_hold_is_released_before_pi_starts(self):
+    def test_wrapper_opens_pi_without_a_blocking_prewake(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             log = root / "events"
@@ -21,10 +21,7 @@ class PiWrapperTest(unittest.TestCase):
 
             curl.write_text(
                 "#!/usr/bin/env bash\n"
-                "case \"$*\" in\n"
-                "  *lifecycle/inhibit*) printf 'inhibit\\n' >>\"$TEST_LOG\" ;;\n"
-                "  *lifecycle/release*) printf 'release\\n' >>\"$TEST_LOG\" ;;\n"
-                "esac\n",
+                "printf 'health\\n' >>\"$TEST_LOG\"\n",
                 encoding="utf-8",
             )
             qwen_cloud.write_text(
@@ -33,7 +30,6 @@ class PiWrapperTest(unittest.TestCase):
             )
             pi.write_text(
                 "#!/usr/bin/env bash\n"
-                "[[ $(tail -n 1 \"$TEST_LOG\") == release ]] || exit 2\n"
                 "printf 'pi\\n' >>\"$TEST_LOG\"\n",
                 encoding="utf-8",
             )
@@ -56,8 +52,9 @@ class PiWrapperTest(unittest.TestCase):
             subprocess.run([str(WRAPPER), "--continue"], env=environment, check=True)
             self.assertEqual(
                 log.read_text(encoding="utf-8").splitlines(),
-                ["inhibit", "ensure", "release", "pi"],
+                ["health", "pi"],
             )
+            self.assertNotIn("ensure", log.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

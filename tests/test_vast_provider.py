@@ -18,10 +18,12 @@ ROOT = Path(__file__).parents[1]
 class VastProviderTest(unittest.TestCase):
     def test_fresh_replacement_prefers_verified_workspace_copy(self) -> None:
         ensure = (ROOT / "scripts" / "vast" / "ensure.sh").read_text(encoding="utf-8")
+        script = (ROOT / "scripts" / "vast" / "qwen-vast").read_text(encoding="utf-8")
         copy_position = ensure.index('"$QWEN_VAST" copy "$old_instance_id" "$new_instance_id"')
         deploy_position = ensure.index('"$QWEN_VAST" deploy "$new_instance_id"')
         self.assertLess(copy_position, deploy_position)
-        self.assertIn('"$QWEN_VAST" activate-copy "$new_instance_id"', ensure)
+        self.assertIn('"$QWEN_VAST" activate-copy "$new_instance_id" "$old_instance_id"', ensure)
+        self.assertIn("stopped-instance workspace copy failed", script)
         self.assertIn("public bootstrap fallback", ensure)
 
     def test_ensure_default_timeout_allows_a_fresh_bootstrap(self) -> None:

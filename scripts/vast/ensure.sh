@@ -162,7 +162,7 @@ for rental_attempt in 1 2 3; do
     echo "Copying the verified Qwen workspace from $old_instance_id to $new_instance_id..." >&2
     "$PROGRESS_COMMAND" workspace_copy "Copying the verified model workspace inside Vast" 240 "$new_instance_id"
     if "$QWEN_VAST" copy "$old_instance_id" "$new_instance_id" >&2 &&
-       "$QWEN_VAST" activate-copy "$new_instance_id" >&2; then
+       "$QWEN_VAST" activate-copy "$new_instance_id" "$old_instance_id" >&2; then
       copied_workspace=1
     else
       echo "The provider-side workspace copy failed. Using the public bootstrap fallback." >&2

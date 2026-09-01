@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2 - Unreleased
+
+- Open the compatibility Pi launcher immediately. Model wake now occurs only
+  through the local proxy, where Pi can show lifecycle progress.
+- Detect a failed Vast stopped-instance copy instead of waiting for its full
+  copy timeout before using the public bootstrap fallback.
+
 ## 0.2.1 - 2026-08-31
 
 - Show the actual retained-GPU, replacement-rental, workspace-copy, bootstrap,

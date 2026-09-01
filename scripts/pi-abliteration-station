@@ -4,45 +4,25 @@ set -euo pipefail
 config=${ABLITERATION_STATION_CONFIG:-/etc/abliteration-station/config.json}
 proxy_url=${PI_ABLITERATION_STATION_URL:-http://127.0.0.1:17072}
 curl_bin=${ABLITERATION_STATION_CURL:-curl}
-lifecycle_bin=${ABLITERATION_STATION_CLI:-/usr/local/bin/abliteration-station}
 pi_bin=${PI_ABLITERATION_STATION_BIN:-$(command -v pi || true)}
 if [[ -z "$pi_bin" ]]; then
   for candidate in /root/.nvm/versions/node/*/bin/pi; do
     [[ -x "$candidate" ]] && pi_bin=$candidate
   done
 fi
-bootstrap_hold_seconds=${ABLITERATION_STATION_BOOTSTRAP_HOLD_SECONDS:-1800}
 model_id=$(jq -er '.model.id' "$config")
-inhibit_active=0
 
 [[ -n "$pi_bin" && -x "$pi_bin" ]] || {
   echo "Pi is not installed or PI_ABLITERATION_STATION_BIN is not executable." >&2
   exit 1
 }
 
-"$curl_bin" -fsS -X POST \
-  "$proxy_url/lifecycle/inhibit?seconds=$bootstrap_hold_seconds" >/dev/null || {
+"$curl_bin" -fsS "$proxy_url/healthz" >/dev/null || {
   echo "The local Qwen lifecycle proxy is not available." >&2
   exit 1
 }
-inhibit_active=1
-release_inhibit() {
-  if [[ "$inhibit_active" == 1 ]]; then
-    "$curl_bin" -fsS -X POST "$proxy_url/lifecycle/release" >/dev/null 2>&1 || true
-    inhibit_active=0
-  fi
-}
-trap release_inhibit EXIT
 
-"$lifecycle_bin" --config "$config" ensure
-
-# The hold protects provider startup and model gates. Release it before Pi
-# starts so the proxy can stop idle compute while an interactive Pi process
-# remains open without an active inference request.
-release_inhibit
-trap - EXIT
-
-"$pi_bin" \
+exec "$pi_bin" \
   --provider abliteration-station \
   --model "$model_id" \
   --thinking medium \

@@ -13,9 +13,9 @@ class PiPackageTest(unittest.TestCase):
         package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
         self.assertIn("pi-package", package["keywords"])
         self.assertEqual(package["pi"]["extensions"], ["./extensions"])
-        self.assertEqual(package["version"], "0.2.1")
+        self.assertEqual(package["version"], "0.2.2")
         self.assertIn(
-            'version = "0.2.1"',
+            'version = "0.2.2"',
             (ROOT / "pyproject.toml").read_text(encoding="utf-8"),
         )
 

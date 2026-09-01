@@ -146,11 +146,18 @@ copy_workspace() {
 
 activate_copy() {
   local instance_id=$1
+  local source_id=${2:-}
   local endpoint host port
   endpoint=$(wait_ssh "$instance_id")
   IFS=$'\t' read -r host port <<<"$endpoint"
   local copy_ready=0
   for _ in $(seq 1 180); do
+    if [[ -n "$source_id" ]]; then
+      source_status=$($VASTAI show instance "$source_id" --raw 2>/dev/null | jq -r '.status_msg // ""')
+      if grep -Eqi 'permission denied|rsync error|copy.*failed|exception:' <<<"$source_status"; then
+        die "Vast reported that the stopped-instance workspace copy failed"
+      fi
+    fi
     if ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
       -i "$SSH_KEY" -p "$port" "root@$host" \
       "test -s '/tmp/qwen38/models/$QWEN38_TARGET_FILE' && \
@@ -578,7 +585,7 @@ Usage:
   qwen-vast wait-ssh INSTANCE_ID
   qwen-vast deploy INSTANCE_ID
   qwen-vast copy SOURCE_INSTANCE_ID DESTINATION_INSTANCE_ID
-  qwen-vast activate-copy INSTANCE_ID
+  qwen-vast activate-copy INSTANCE_ID [SOURCE_ID]
   qwen-vast verify INSTANCE_ID
   qwen-vast performance-gate INSTANCE_ID
   qwen-vast resume INSTANCE_ID
@@ -601,7 +608,7 @@ case "${1:-}" in
   wait-ssh) need_auth; wait_ssh "${2:?Instance ID is required}" ;;
   deploy) need_auth; deploy_instance "${2:?Instance ID is required}" ;;
   copy) need_auth; copy_workspace "${2:?Source ID is required}" "${3:?Destination ID is required}" ;;
-  activate-copy) need_auth; activate_copy "${2:?Instance ID is required}" ;;
+  activate-copy) need_auth; activate_copy "${2:?Instance ID is required}" "${3:-}" ;;
   verify) need_auth; verify_instance "${2:?Instance ID is required}" ;;
   performance-gate)
     need_auth
