@@ -132,7 +132,7 @@ longer need it.
 
 ## Measured reference result
 
-The accepted reference host used an RTX 5090, at least 48 GB of system RAM, and
+The accepted reference host used an RTX 5090, at least 32 GB of system RAM, and
 a qualified CPU and PCIe path. The corrected 117,046-token gate reached 119.0
 decode tokens per second. A separate 239,310-token near-limit gate reached 83.1
 decode tokens per second. A retained-host cold start has reached the model in

@@ -6,7 +6,7 @@ source "$SCRIPT_DIR/portable-manifest.env"
 VASTAI=${VASTAI:-$SCRIPT_DIR/.vast-venv/bin/vastai}
 SSH_KEY=${QWEN38_SSH_KEY:-$HOME/.ssh/abliteration-station-vast}
 INSTANCE_FILE=${ABLITERATION_STATION_INSTANCE_FILE:-/var/lib/abliteration-station/vast-instance-id}
-QUERY_BASE='gpu_name=RTX_5090 num_gpus=1 verified=True rentable=True reliability>=0.98 direct_port_count>=1 cpu_ram>=48 disk_space>=150 cuda_vers>=13 dlperf>=190 duration>=30'
+QUERY_BASE='gpu_name=RTX_5090 num_gpus=1 verified=True rentable=True reliability>=0.98 direct_port_count>=1 cpu_ram>=32 disk_space>=150 cuda_vers>=13 dlperf>=190 duration>=30'
 CUDA_MIN=${QWEN38_CUDA_MIN:-13.2}
 QUERY_PERFORMANCE="$QUERY_BASE pcie_bw>=45"
 QUERY_BALANCED="$QUERY_BASE pcie_bw>=25"

@@ -16,6 +16,13 @@ ROOT = Path(__file__).parents[1]
 
 
 class VastProviderTest(unittest.TestCase):
+    def test_selector_accepts_32_gb_system_ram_hosts(self) -> None:
+        script = (ROOT / "scripts" / "vast" / "qwen-vast").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("cpu_ram>=32", script)
+        self.assertNotIn("cpu_ram>=48", script)
+
     def test_fresh_replacement_prefers_verified_workspace_copy(self) -> None:
         ensure = (ROOT / "scripts" / "vast" / "ensure.sh").read_text(encoding="utf-8")
         script = (ROOT / "scripts" / "vast" / "qwen-vast").read_text(encoding="utf-8")
