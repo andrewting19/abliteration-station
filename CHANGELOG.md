@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.1 - Unreleased
+## 0.2.1 - 2026-08-31
 
 - Show the actual retained-GPU, replacement-rental, workspace-copy, bootstrap,
   performance-gate, and private-route phases in Pi with phase estimates.
