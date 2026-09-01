@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.2 - Unreleased
+## 0.2.2 - 2026-09-01
 
 - Open the compatibility Pi launcher immediately. Model wake now occurs only
   through the local proxy, where Pi can show lifecycle progress.
