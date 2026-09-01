@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+instance_id=${1:?Instance ID is required}
+[[ "$instance_id" =~ ^[0-9]+$ ]] || { echo "Instance ID must be numeric." >&2; exit 2; }
+
+proxy_url=${ABLITERATION_STATION_PROXY_URL:-http://127.0.0.1:17072}
+qwen_vast=${QWEN38_QWEN_VAST:-/usr/local/lib/abliteration-station/vast/qwen-vast}
+result_dir=${ABLITERATION_STATION_GATE_RESULT_DIR:-/var/lib/abliteration-station/performance-gates}
+minimum_idle_seconds=${ABLITERATION_STATION_GATE_IDLE_SECONDS:-60}
+wait_limit_seconds=${ABLITERATION_STATION_GATE_WAIT_SECONDS:-3600}
+
+install -d -m 0700 "$result_dir"
+deadline=$((SECONDS + wait_limit_seconds))
+while (( SECONDS < deadline )); do
+  health=$(curl -fsS --max-time 3 "$proxy_url/healthz" 2>/dev/null || true)
+  active=$(jq -r '.active_requests // 1' <<<"$health" 2>/dev/null || echo 1)
+  idle=$(jq -r '.idle_seconds // 0' <<<"$health" 2>/dev/null || echo 0)
+  routed=$(jq -r '.route.identity.instance_id // empty' <<<"$health" 2>/dev/null || true)
+  [[ "$routed" == "$instance_id" ]] || exit 0
+  if [[ "$active" == 0 && "$idle" =~ ^[0-9]+$ ]] && (( idle >= minimum_idle_seconds )); then
+    break
+  fi
+  sleep 5
+done
+(( SECONDS < deadline )) || exit 0
+
+temporary="$result_dir/${instance_id}.json.tmp"
+if "$qwen_vast" performance-gate "$instance_id" >"$temporary"; then
+  jq '. + {deferred: true, passed: true, completed_at: (now | todate)}' \
+    "$temporary" >"$result_dir/${instance_id}.json"
+else
+  jq -n --argjson instance_id "$instance_id" \
+    '{instance_id: $instance_id, deferred: true, passed: false, completed_at: (now | todate)}' \
+    >"$result_dir/${instance_id}.json"
+fi
+rm -f "$temporary"

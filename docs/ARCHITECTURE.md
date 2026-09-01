@@ -46,8 +46,16 @@ For the included profile, every route must report these configured values:
 - target quantization that starts with `Q3_K`;
 - non-empty output from a native medium-thinking chat request.
 
-A fresh host also runs a synthetic long-context replay. The default minimum is
-80 decode tokens per second. A host that fails this gate is stopped and deleted.
+A fresh host enters the private route after the model and chat gates pass. The
+first queued user request does not wait for a synthetic benchmark. After the
+route is idle, a deferred worker runs the 120K replay and tool gate and records
+the result. This gate supplies host-selection evidence without adding minutes
+to first-token latency.
+
+Vast's stopped-instance copy path is disabled by default because the provider
+copy service was not reliable in production. Set `QWEN38_USE_PROVIDER_COPY=1`
+only for a bounded transfer test. Public artifact bootstrap remains the default
+until the transfer path has a successful acceptance record.
 
 ## Idle stop
 

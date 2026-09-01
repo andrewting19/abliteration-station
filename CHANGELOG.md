@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 - Unreleased
+
+- Remove the failed provider-copy experiment from the default request path.
+- Move the 120K performance and tool gate after first-token recovery and run it
+  only after the route becomes idle.
+- Report dependency, runtime, target-download, draft-download, quantization,
+  model-load, and route phases separately in Pi.
+
 ## 0.2.2 - 2026-09-01
 
 - Open the compatibility Pi launcher immediately. Model wake now occurs only

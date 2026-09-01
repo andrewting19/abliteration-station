@@ -42,6 +42,7 @@ install -m 0755 "$source_dir/scripts/install-pi-provider.py" "$install_root/inst
 install -m 0755 "$source_dir/scripts/remove-pi-provider.py" "$install_root/remove-pi-provider.py"
 install -m 0755 "$source_dir/scripts/migrate-config.py" "$install_root/migrate-config.py"
 install -m 0755 "$source_dir/scripts/lifecycle-progress" /usr/local/bin/abliteration-station-progress
+install -m 0755 "$source_dir/scripts/deferred-performance-gate" /usr/local/bin/abliteration-station-deferred-gate
 install -m 0755 "$vast_root/ensure.sh" "$vast_root/ensure"
 install -m 0755 "$source_dir/scripts/idle-proxy.mjs" /usr/local/lib/abliteration-station/idle-proxy.mjs
 install -m 0644 "$source_dir/scripts/abliteration-station-proxy.service" \

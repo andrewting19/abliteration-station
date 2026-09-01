@@ -12,13 +12,15 @@ PRICE_CAP=${QWEN38_MAX_DPH:-0.53}
 LOCK_FILE=${QWEN38_ENSURE_LOCK:-/run/lock/qwen38-vast-ensure.lock}
 API_KEY_COMMAND=${QWEN38_API_KEY_COMMAND:-$QWEN_VAST_DIR/inference-key}
 PROGRESS_COMMAND=${ABLITERATION_STATION_PROGRESS_COMMAND:-/usr/local/bin/abliteration-station-progress}
+DEFERRED_GATE_COMMAND=${ABLITERATION_STATION_DEFERRED_GATE_COMMAND:-/usr/local/bin/abliteration-station-deferred-gate}
+USE_PROVIDER_COPY=${QWEN38_USE_PROVIDER_COPY:-0}
 
 die() {
   echo "Abliteration Station start failed: $*" >&2
   exit 1
 }
 
-for required in "$VASTAI" "$QWEN_VAST" "$API_KEY_COMMAND" "$PROGRESS_COMMAND"; do
+for required in "$VASTAI" "$QWEN_VAST" "$API_KEY_COMMAND" "$PROGRESS_COMMAND" "$DEFERRED_GATE_COMMAND"; do
   [[ -x "$required" ]] || die "required executable is missing: $required"
 done
 [[ "$PRICE_CAP" =~ ^[0-9]+([.][0-9]+)?$ ]] || die "QWEN38_MAX_DPH must be numeric"
@@ -128,7 +130,7 @@ rollback_new_instance() {
   echo "Stopping and removing failed fresh instance $failed_instance_id." >&2
   $VASTAI stop instance "$failed_instance_id" --raw >/dev/null 2>&1 || true
   $VASTAI destroy instance "$failed_instance_id" --yes --raw >/dev/null 2>&1 || true
-  if [[ -n "$old_instance_id" ]]; then
+  if [[ -n "$old_instance_id" && "$USE_PROVIDER_COPY" == 1 ]]; then
     printf '%s\n' "$old_instance_id" | install -m 0644 /dev/stdin "$INSTANCE_FILE"
   else
     rm -f "$INSTANCE_FILE"
@@ -177,14 +179,6 @@ for rental_attempt in 1 2 3; do
     fi
   fi
 
-  echo "Running the 120K real-Pi decode gate on Vast instance $new_instance_id..." >&2
-  "$PROGRESS_COMMAND" performance_gate "Testing 120K-context speed and tool use" 180 "$new_instance_id"
-  if ! "$QWEN_VAST" performance-gate "$new_instance_id" >&2; then
-    echo "Vast instance $new_instance_id did not sustain 80 decode TPS." >&2
-    rollback_new_instance "$new_instance_id"
-    continue
-  fi
-
   if [[ -n "$old_instance_id" ]]; then
     route_args=("$new_instance_id" "$old_instance_id")
   else
@@ -200,6 +194,8 @@ for rental_attempt in 1 2 3; do
     if model_is_ready && chat_is_ready; then
       echo "Fresh Qwen instance $new_instance_id passed the Q3/262K chat gate." >&2
       "$PROGRESS_COMMAND" ready "Qwen is ready on the replacement GPU" 0 "$new_instance_id"
+      nohup "$DEFERRED_GATE_COMMAND" "$new_instance_id" \
+        >"/var/log/abliteration-station-gate-$new_instance_id.log" 2>&1 </dev/null &
       if [[ -n "$old_instance_id" ]]; then
         echo "Removing replaced instance $old_instance_id to stop its storage charge." >&2
         $VASTAI destroy instance "$old_instance_id" --yes --raw >/dev/null 2>&1 ||

@@ -25,6 +25,9 @@ class VastProviderTest(unittest.TestCase):
         self.assertIn('"$QWEN_VAST" activate-copy "$new_instance_id" "$old_instance_id"', ensure)
         self.assertIn("stopped-instance workspace copy failed", script)
         self.assertIn("public bootstrap fallback", ensure)
+        self.assertIn("QWEN38_USE_PROVIDER_COPY:-0", ensure)
+        self.assertIn("abliteration-station-deferred-gate", ensure)
+        self.assertNotIn('"$QWEN_VAST" performance-gate "$new_instance_id"', ensure)
 
     def test_ensure_default_timeout_allows_a_fresh_bootstrap(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -144,6 +147,8 @@ class VastProviderTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("QWEN38_STOPPED_START_GRACE_SECONDS:-45", script)
+        self.assertIn("QWEN38_RETAINED_START=1", script)
+        self.assertIn("did not return the retained GPU within", script)
         self.assertIn("copy did not finish within 15 minutes", script)
 
 

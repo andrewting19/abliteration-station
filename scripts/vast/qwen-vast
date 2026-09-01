@@ -81,7 +81,9 @@ wait_ssh() {
   local instance_id=$1
   local poll_seconds=${QWEN38_SSH_POLL_SECONDS:-10}
   local stopped_start_grace_seconds=${QWEN38_STOPPED_START_GRACE_SECONDS:-45}
+  local retained_start=${QWEN38_RETAINED_START:-0}
   local deadline=$((SECONDS + 900))
+  local retained_deadline=$((SECONDS + stopped_start_grace_seconds))
   local instance_json host port actual_status intended_status running_since=0 stopped_since=0
   while (( SECONDS < deadline )); do
     instance_json=$("$VASTAI" show instance "$instance_id" --raw 2>/dev/null || true)
@@ -90,6 +92,10 @@ wait_ssh() {
     fi
     actual_status=$(jq -r '.actual_status // empty' <<<"$instance_json" 2>/dev/null || true)
     intended_status=$(jq -r '.intended_status // empty' <<<"$instance_json" 2>/dev/null || true)
+    if [[ "$retained_start" == 1 && "$actual_status" != running ]] &&
+       (( SECONDS >= retained_deadline )); then
+      die "Vast did not return the retained GPU within ${stopped_start_grace_seconds} seconds"
+    fi
     if jq -e '
       (.status_msg // "") |
       test("nvidia-container-cli: requirement error|unsatisfied condition: cuda")
@@ -132,7 +138,7 @@ deploy_instance() {
   local endpoint host port
   endpoint=$(wait_ssh "$instance_id")
   IFS=$'\t' read -r host port <<<"$endpoint"
-  "$SCRIPT_DIR/deploy-fresh-vast.sh" "$host" "$port" "$SSH_KEY"
+  "$SCRIPT_DIR/deploy-fresh-vast.sh" "$host" "$port" "$SSH_KEY" "$instance_id"
 }
 
 copy_workspace() {
@@ -180,7 +186,7 @@ activate_copy() {
       [[ ! -e /workspace/qwen38 ]] || { echo "/workspace/qwen38 already exists" >&2; exit 1; }
       mv /tmp/qwen38 /workspace/qwen38
     '
-  "$SCRIPT_DIR/deploy-fresh-vast.sh" "$host" "$port" "$SSH_KEY"
+  "$SCRIPT_DIR/deploy-fresh-vast.sh" "$host" "$port" "$SSH_KEY" "$instance_id"
 }
 
 verify_instance() {
@@ -275,7 +281,7 @@ performance_gate_instance() {
 resume_instance() {
   local instance_id=$1
   local endpoint host port
-  endpoint=$(QWEN38_SSH_POLL_SECONDS=2 wait_ssh "$instance_id")
+  endpoint=$(QWEN38_SSH_POLL_SECONDS=2 QWEN38_RETAINED_START=1 wait_ssh "$instance_id")
   IFS=$'\t' read -r host port <<<"$endpoint"
   ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
     -i "$SSH_KEY" -p "$port" "root@$host" '

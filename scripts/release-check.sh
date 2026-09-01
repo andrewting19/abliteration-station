@@ -9,10 +9,10 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 
 while IFS= read -r script; do
   bash -n "$script"
-done < <(find scripts -type f -name '*.sh' -o -type f -name 'qwen-vast' -o -type f -name 'abliteration-station' -o -type f -name 'pi-abliteration-station' -o -type f -name 'inference-key' -o -type f -name 'lifecycle-progress')
+done < <(find scripts -type f -name '*.sh' -o -type f -name 'qwen-vast' -o -type f -name 'abliteration-station' -o -type f -name 'pi-abliteration-station' -o -type f -name 'inference-key' -o -type f -name 'lifecycle-progress' -o -type f -name 'deferred-performance-gate')
 
 if command -v shellcheck >/dev/null 2>&1; then
-  mapfile -t shell_files < <(find scripts -type f \( -name '*.sh' -o -name 'qwen-vast' -o -name 'abliteration-station' -o -name 'pi-abliteration-station' -o -name 'inference-key' -o -name 'lifecycle-progress' \))
+  mapfile -t shell_files < <(find scripts -type f \( -name '*.sh' -o -name 'qwen-vast' -o -name 'abliteration-station' -o -name 'pi-abliteration-station' -o -name 'inference-key' -o -name 'lifecycle-progress' -o -name 'deferred-performance-gate' \))
   shellcheck --severity=warning "${shell_files[@]}"
 elif [[ ${REQUIRE_SHELLCHECK:-0} == 1 ]]; then
   echo "ShellCheck is required but not installed." >&2
@@ -33,6 +33,7 @@ required = {
     "scripts/install.sh",
     "scripts/idle-proxy.mjs",
     "scripts/lifecycle-progress",
+    "scripts/deferred-performance-gate",
     "config/example.json",
 }
 missing = sorted(required - names)

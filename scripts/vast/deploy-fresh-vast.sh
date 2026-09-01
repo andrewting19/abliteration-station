@@ -2,20 +2,28 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 SSH_HOST SSH_PORT [SSH_KEY]" >&2
+  echo "Usage: $0 SSH_HOST SSH_PORT [SSH_KEY] [INSTANCE_ID]" >&2
   exit 2
 }
 
-[[ $# -ge 2 && $# -le 3 ]] || usage
+[[ $# -ge 2 && $# -le 4 ]] || usage
 
 SSH_HOST=$1
 SSH_PORT=$2
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 SSH_KEY=${3:-$HOME/.ssh/abliteration-station-vast}
+INSTANCE_ID=${4:-null}
+PROGRESS_COMMAND=${ABLITERATION_STATION_PROGRESS_COMMAND:-/usr/local/bin/abliteration-station-progress}
 REMOTE_STAGE=/tmp/qwen38-portable
 
 [[ "$SSH_PORT" =~ ^[0-9]+$ ]] || usage
 [[ -s "$SSH_KEY" ]] || { echo "SSH key not found: $SSH_KEY" >&2; exit 1; }
+[[ "$INSTANCE_ID" == null || "$INSTANCE_ID" =~ ^[0-9]+$ ]] || usage
+
+progress() {
+  [[ -x "$PROGRESS_COMMAND" ]] || return 0
+  "$PROGRESS_COMMAND" "$1" "$2" "$3" "$INSTANCE_ID"
+}
 
 SSH=(ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
   -i "$SSH_KEY" -p "$SSH_PORT" "root@$SSH_HOST")
@@ -23,6 +31,7 @@ SCP=(scp -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept
   -i "$SSH_KEY" -P "$SSH_PORT")
 
 "${SSH[@]}" "install -d -m 0755 '$REMOTE_STAGE' /workspace/qwen38"
+progress runtime_assets "Sending the verified runtime assets" 45
 "${SCP[@]}" \
   "$SCRIPT_DIR/bootstrap-fresh-vast.sh" \
   "$SCRIPT_DIR/portable-manifest.env" \
@@ -61,6 +70,21 @@ if [[ "${QWEN38_ACTIVATE_TAILSCALE_STATE:-0}" == "1" && \
   "${SSH[@]}" 'chmod 0600 /workspace/qwen38/tailscale/tailscaled.state'
 fi
 
-"${SSH[@]}" "bash '$REMOTE_STAGE/bootstrap-fresh-vast.sh'"
+progress runtime_prepare "Preparing the CUDA runtime and inference server" 120
+"${SSH[@]}" "bash '$REMOTE_STAGE/bootstrap-fresh-vast.sh'" 2>&1 | while IFS= read -r line; do
+  printf '%s\n' "$line"
+  case "$line" in
+    *"Cloning into"*|*"Using the verified cached RTX 5090 build"*)
+      progress runtime_prepare "Preparing the pinned llama.cpp runtime" 90 ;;
+    *"Qwen3.8-27B-Unleashed-UD-Q3_K_XL.gguf.part"*)
+      progress target_download "Downloading the 12 GB Qwen target" 180 ;;
+    *"Qwen3.8-27B-DFlash2-BF16.gguf.part"*)
+      progress draft_download "Downloading the 3.5 GB draft source" 60 ;;
+    *"llama_quantize: quantizing"*)
+      progress draft_quantize "Quantizing the draft model" 20 ;;
+    *"qwen38-cloud: started"*|*"Qwen3.8 service is healthy"*)
+      progress model_load "Loading Qwen and DFlash into the RTX 5090" 45 ;;
+  esac
+done
 
 echo "Deployment completed on $SSH_HOST:$SSH_PORT"
