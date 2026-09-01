@@ -25,27 +25,6 @@ fi
 mkdir -p "$QWEN38_ROOT/models" "$QWEN38_ROOT/slot-cache" "$QWEN38_ROOT/tailscale"
 
 LLAMA_DIR="$QWEN38_ROOT/llama.cpp-master-dflash"
-if [[ ! -d "$LLAMA_DIR/.git" ]]; then
-  git clone --filter=blob:none --no-checkout \
-    https://github.com/ggml-org/llama.cpp.git "$LLAMA_DIR"
-fi
-
-CURRENT_TREE=$(git -C "$LLAMA_DIR" rev-parse 'HEAD^{tree}' 2>/dev/null || true)
-if [[ "$CURRENT_TREE" != "$QWEN38_LLAMA_EXPECTED_TREE" ]]; then
-  git -C "$LLAMA_DIR" checkout --detach "$QWEN38_LLAMA_BASE_COMMIT"
-  git -C "$LLAMA_DIR" fetch origin "$QWEN38_DFLASH_COMMIT"
-  git -C "$LLAMA_DIR" \
-    -c user.name=qwen38-bootstrap \
-    -c user.email=qwen38-bootstrap@localhost \
-    cherry-pick FETCH_HEAD
-fi
-
-CURRENT_TREE=$(git -C "$LLAMA_DIR" rev-parse 'HEAD^{tree}')
-if [[ "$CURRENT_TREE" != "$QWEN38_LLAMA_EXPECTED_TREE" ]]; then
-  echo "Unexpected llama.cpp tree after build preparation: $CURRENT_TREE" >&2
-  exit 1
-fi
-
 BUILD_NAME=build-cuda13-master
 BUILD_CACHE_NAME=$QWEN38_BUILD_CACHE_FILE
 BUILD_PROFILE=portable-sm120a
@@ -53,6 +32,16 @@ BUILD_NATIVE=OFF
 BUILD_DIR="$LLAMA_DIR/$BUILD_NAME"
 BUILD_CACHE="$SCRIPT_DIR/$BUILD_CACHE_NAME"
 BUILD_CACHE_SHA="$BUILD_CACHE.sha256"
+
+build_matches_source() {
+  local binary=$1
+  [[ -x "$binary" ]] || return 1
+  [[ -r "$BUILD_DIR/.qwen38-build-profile" ]] || return 1
+  [[ $(<"$BUILD_DIR/.qwen38-build-profile") == "$BUILD_PROFILE" ]] || return 1
+  [[ -r "$BUILD_DIR/.qwen38-source-tree" ]] || return 1
+  [[ $(<"$BUILD_DIR/.qwen38-source-tree") == "$QWEN38_LLAMA_EXPECTED_TREE" ]] || return 1
+  "$binary" --version >/dev/null 2>&1
+}
 
 if [[ ${CUDA_VERSION:-} == 13.2* && ! -s "$BUILD_CACHE" ]]; then
   if aria2c \
@@ -74,17 +63,8 @@ if [[ ${CUDA_VERSION:-} == 13.2* && ! -s "$BUILD_CACHE" ]]; then
   fi
 fi
 
-build_matches_source() {
-  local binary=$1
-  [[ -x "$binary" ]] || return 1
-  [[ -r "$BUILD_DIR/.qwen38-build-profile" ]] || return 1
-  [[ $(<"$BUILD_DIR/.qwen38-build-profile") == "$BUILD_PROFILE" ]] || return 1
-  [[ -r "$BUILD_DIR/.qwen38-source-tree" ]] || return 1
-  [[ $(<"$BUILD_DIR/.qwen38-source-tree") == "$QWEN38_LLAMA_EXPECTED_TREE" ]] || return 1
-  "$binary" --version >/dev/null 2>&1
-}
-
 if [[ -s "$BUILD_CACHE" && -s "$BUILD_CACHE_SHA" && ! -x "$BUILD_DIR/bin/llama-server" ]]; then
+  mkdir -p "$LLAMA_DIR"
   (cd "$SCRIPT_DIR" && sha256sum -c "$(basename -- "$BUILD_CACHE_SHA")")
   tar --zstd -xf "$BUILD_CACHE" -C "$LLAMA_DIR"
 fi
@@ -95,7 +75,27 @@ if [[ -x "$BUILD_DIR/bin/llama-server" ]] && ! build_matches_source "$BUILD_DIR/
   mv "$BUILD_DIR" "$rejected_dir"
 fi
 
-if [[ ! -x "$BUILD_DIR/bin/llama-server" || ! -x "$BUILD_DIR/bin/llama-quantize" ]]; then
+if build_matches_source "$BUILD_DIR/bin/llama-server" &&
+   [[ -x "$BUILD_DIR/bin/llama-quantize" ]]; then
+  echo "Using the verified cached RTX 5090 build."
+else
+  if [[ -e "$LLAMA_DIR" ]]; then
+    rejected_source="${LLAMA_DIR}.rejected-$(date -u +%Y%m%dT%H%M%SZ)"
+    mv "$LLAMA_DIR" "$rejected_source"
+  fi
+  git clone --filter=blob:none --no-checkout \
+    https://github.com/ggml-org/llama.cpp.git "$LLAMA_DIR"
+  git -C "$LLAMA_DIR" checkout --detach "$QWEN38_LLAMA_BASE_COMMIT"
+  git -C "$LLAMA_DIR" fetch origin "$QWEN38_DFLASH_COMMIT"
+  git -C "$LLAMA_DIR" \
+    -c user.name=qwen38-bootstrap \
+    -c user.email=qwen38-bootstrap@localhost \
+    cherry-pick FETCH_HEAD
+  CURRENT_TREE=$(git -C "$LLAMA_DIR" rev-parse 'HEAD^{tree}')
+  if [[ "$CURRENT_TREE" != "$QWEN38_LLAMA_EXPECTED_TREE" ]]; then
+    echo "Unexpected llama.cpp tree after build preparation: $CURRENT_TREE" >&2
+    exit 1
+  fi
   cmake -S "$LLAMA_DIR" -B "$BUILD_DIR" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_CUDA_ARCHITECTURES=120a \
@@ -107,8 +107,6 @@ if [[ ! -x "$BUILD_DIR/bin/llama-server" || ! -x "$BUILD_DIR/bin/llama-quantize"
   cmake --build "$BUILD_DIR" --target llama-server llama-quantize -j "$(nproc)"
   printf '%s\n' "$BUILD_PROFILE" > "$BUILD_DIR/.qwen38-build-profile"
   printf '%s\n' "$QWEN38_LLAMA_EXPECTED_TREE" > "$BUILD_DIR/.qwen38-source-tree"
-else
-  echo "Using the verified cached RTX 5090 build."
 fi
 
 build_matches_source "$BUILD_DIR/bin/llama-server" || {

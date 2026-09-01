@@ -29,6 +29,10 @@ class VastProviderTest(unittest.TestCase):
             manifest,
         )
         self.assertIn("${CUDA_VERSION:-} == 13.2*", bootstrap)
+        self.assertLess(
+            bootstrap.index("Using the verified cached RTX 5090 build"),
+            bootstrap.index("git clone --filter=blob:none"),
+        )
         self.assertIn("draft_artifact_pid=$!", bootstrap)
         self.assertLess(
             bootstrap.index("draft_artifact_pid=$!"),
