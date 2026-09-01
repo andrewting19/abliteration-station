@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+progress_file=${ABLITERATION_STATION_PROGRESS_FILE:-/run/abliteration-station/progress.json}
+phase=${1:?Phase is required}
+message=${2:?Message is required}
+eta_seconds=${3:-null}
+instance_id=${4:-null}
+
+[[ "$eta_seconds" == "null" || "$eta_seconds" =~ ^[0-9]+$ ]] || {
+  echo "ETA must be null or a non-negative integer." >&2
+  exit 2
+}
+[[ "$instance_id" == "null" || "$instance_id" =~ ^[0-9]+$ ]] || {
+  echo "Instance ID must be null or numeric." >&2
+  exit 2
+}
+
+install -d -m 0755 "$(dirname -- "$progress_file")"
+temporary="${progress_file}.tmp.$$"
+jq -n \
+  --arg phase "$phase" \
+  --arg message "$message" \
+  --argjson eta_seconds "$eta_seconds" \
+  --argjson instance_id "$instance_id" \
+  '{
+    phase: $phase,
+    message: $message,
+    phase_started_unix_ms: (now * 1000 | floor),
+    eta_seconds: $eta_seconds,
+    instance_id: $instance_id
+  }' >"$temporary"
+chmod 0600 "$temporary"
+mv -f "$temporary" "$progress_file"

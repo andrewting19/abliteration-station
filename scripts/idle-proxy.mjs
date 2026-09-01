@@ -11,6 +11,7 @@ const idleSeconds = Number(process.env.ABLITERATION_STATION_IDLE_SECONDS ?? "600
 const testMode = process.env.ABLITERATION_STATION_TEST_MODE === "1";
 const idlePollMs = Number(process.env.ABLITERATION_STATION_IDLE_POLL_MS ?? "15000");
 const routeFile = process.env.ABLITERATION_STATION_ROUTE_FILE ?? "/run/abliteration-station/route.json";
+const progressFile = process.env.ABLITERATION_STATION_PROGRESS_FILE ?? "/run/abliteration-station/progress.json";
 const activityFile = process.env.ABLITERATION_STATION_ACTIVITY_FILE ?? "/run/abliteration-station/activity.json";
 const stopCommand = process.env.ABLITERATION_STATION_STOP_COMMAND ?? "/usr/local/bin/abliteration-station";
 const ensureCommand = process.env.ABLITERATION_STATION_ENSURE_COMMAND ?? "/usr/local/bin/abliteration-station";
@@ -39,6 +40,14 @@ function readRoute() {
   return JSON.parse(fs.readFileSync(routeFile, "utf8"));
 }
 
+function readProgress() {
+  try {
+    return JSON.parse(fs.readFileSync(progressFile, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
 function writeState() {
   const now = Date.now();
   const temporary = `${activityFile}.tmp`;
@@ -51,6 +60,7 @@ function writeState() {
     stopped_for_activity_unix_ms: stoppedActivityMs,
     wake_in_flight: ensureInFlight !== null,
     last_wake_error: fs.existsSync(routeFile) ? null : lastWakeError,
+    lifecycle: ensureInFlight !== null ? readProgress() : null,
     route: fs.existsSync(routeFile) ? readRoute() : null,
   })}\n`, { mode: 0o600 });
   fs.renameSync(temporary, activityFile);

@@ -12,6 +12,7 @@ Environment=ABLITERATION_STATION_CONFIG=/etc/abliteration-station/config.json
 Environment=ABLITERATION_STATION_IDLE_SECONDS=600
 Environment=ABLITERATION_STATION_PROXY_PORT=17072
 Environment=ABLITERATION_STATION_ROUTE_FILE=/run/abliteration-station/route.json
+Environment=ABLITERATION_STATION_PROGRESS_FILE=/run/abliteration-station/progress.json
 Environment=ABLITERATION_STATION_ACTIVITY_FILE=/run/abliteration-station/activity.json
 Environment=ABLITERATION_STATION_ENSURE_COMMAND=/usr/local/bin/abliteration-station
 Environment=TMPDIR=/run/abliteration-station

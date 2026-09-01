@@ -16,6 +16,14 @@ ROOT = Path(__file__).parents[1]
 
 
 class VastProviderTest(unittest.TestCase):
+    def test_fresh_replacement_prefers_verified_workspace_copy(self) -> None:
+        ensure = (ROOT / "scripts" / "vast" / "ensure.sh").read_text(encoding="utf-8")
+        copy_position = ensure.index('"$QWEN_VAST" copy "$old_instance_id" "$new_instance_id"')
+        deploy_position = ensure.index('"$QWEN_VAST" deploy "$new_instance_id"')
+        self.assertLess(copy_position, deploy_position)
+        self.assertIn('"$QWEN_VAST" activate-copy "$new_instance_id"', ensure)
+        self.assertIn("public bootstrap fallback", ensure)
+
     def test_ensure_default_timeout_allows_a_fresh_bootstrap(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -129,11 +137,12 @@ class VastProviderTest(unittest.TestCase):
             self.assertEqual(json.loads(result.stdout)["offer_id"], 202)
             self.assertEqual(calls.read_text(encoding="utf-8").splitlines(), ["101", "202"])
 
-    def test_retained_start_grace_defaults_to_five_minutes(self) -> None:
+    def test_retained_start_grace_fails_over_after_provider_scheduling_window(self) -> None:
         script = (ROOT / "scripts" / "vast" / "qwen-vast").read_text(
             encoding="utf-8"
         )
-        self.assertIn("QWEN38_STOPPED_START_GRACE_SECONDS:-300", script)
+        self.assertIn("QWEN38_STOPPED_START_GRACE_SECONDS:-45", script)
+        self.assertIn("copy did not finish within 15 minutes", script)
 
 
 if __name__ == "__main__":

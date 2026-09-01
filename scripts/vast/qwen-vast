@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+source "$SCRIPT_DIR/portable-manifest.env"
 VASTAI=${VASTAI:-$SCRIPT_DIR/.vast-venv/bin/vastai}
 SSH_KEY=${QWEN38_SSH_KEY:-$HOME/.ssh/abliteration-station-vast}
 INSTANCE_FILE=${ABLITERATION_STATION_INSTANCE_FILE:-/var/lib/abliteration-station/vast-instance-id}
@@ -79,7 +80,7 @@ ssh_url() {
 wait_ssh() {
   local instance_id=$1
   local poll_seconds=${QWEN38_SSH_POLL_SECONDS:-10}
-  local stopped_start_grace_seconds=${QWEN38_STOPPED_START_GRACE_SECONDS:-300}
+  local stopped_start_grace_seconds=${QWEN38_STOPPED_START_GRACE_SECONDS:-45}
   local deadline=$((SECONDS + 900))
   local instance_json host port actual_status intended_status running_since=0 stopped_since=0
   while (( SECONDS < deadline )); do
@@ -148,6 +149,22 @@ activate_copy() {
   local endpoint host port
   endpoint=$(wait_ssh "$instance_id")
   IFS=$'\t' read -r host port <<<"$endpoint"
+  local copy_ready=0
+  for _ in $(seq 1 180); do
+    if ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+      -i "$SSH_KEY" -p "$port" "root@$host" \
+      "test -s '/tmp/qwen38/models/$QWEN38_TARGET_FILE' && \
+       test -s '/tmp/qwen38/models/$QWEN38_DRAFT_Q4_FILE' && \
+       test -x '/tmp/qwen38/llama.cpp-master-dflash/build-cuda13-master/bin/llama-server' && \
+       echo '$QWEN38_TARGET_SHA256  /tmp/qwen38/models/$QWEN38_TARGET_FILE' | sha256sum -c - >/dev/null && \
+       echo '$QWEN38_DRAFT_Q4_SHA256  /tmp/qwen38/models/$QWEN38_DRAFT_Q4_FILE' | sha256sum -c - >/dev/null"; then
+      copy_ready=1
+      break
+    fi
+    sleep 5
+  done
+  (( copy_ready == 1 )) || die "The verified workspace copy did not finish within 15 minutes"
+
   ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
     -i "$SSH_KEY" -p "$port" "root@$host" '
       set -euo pipefail

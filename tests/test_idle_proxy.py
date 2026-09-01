@@ -63,6 +63,7 @@ class IdleProxyTest(unittest.TestCase):
         unit = SERVICE.read_text(encoding="utf-8")
         self.assertIn("Environment=TMPDIR=/run/abliteration-station", unit)
         self.assertIn("RuntimeDirectory=abliteration-station", unit)
+        self.assertIn("ABLITERATION_STATION_PROGRESS_FILE", unit)
 
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -111,6 +112,7 @@ class IdleProxyTest(unittest.TestCase):
                 "ABLITERATION_STATION_IDLE_POLL_MS": "100",
                 "ABLITERATION_STATION_TEST_MODE": "1",
                 "ABLITERATION_STATION_ROUTE_FILE": str(route),
+                "ABLITERATION_STATION_PROGRESS_FILE": str(self.root / "progress.json"),
                 "ABLITERATION_STATION_ACTIVITY_FILE": str(self.root / "activity.json"),
                 "ABLITERATION_STATION_ENSURE_COMMAND": str(ensure),
                 "ABLITERATION_STATION_STOP_COMMAND": str(stop),
@@ -157,6 +159,36 @@ class IdleProxyTest(unittest.TestCase):
         self.assertEqual(caught.exception.code, 503)
         body = json.loads(caught.exception.read())
         self.assertIn("model wake failed", body["error"]["message"])
+
+    def test_health_exposes_lifecycle_phase_only_during_wake(self) -> None:
+        progress = self.root / "progress.json"
+        progress.write_text(
+            json.dumps({
+                "phase": "retained_wait",
+                "message": "Waiting for retained GPU",
+                "phase_started_unix_ms": 1,
+                "eta_seconds": 300,
+            }),
+            encoding="utf-8",
+        )
+        self.start_proxy()
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{self.proxy_port}/v1/chat/completions",
+            data=b'{"model":"qwen38-cloud"}',
+            headers={"Content-Type": "application/json"},
+        )
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(lambda: urllib.request.urlopen(request, timeout=5).read())
+            deadline = time.monotonic() + 2
+            lifecycle = None
+            while time.monotonic() < deadline:
+                with urllib.request.urlopen(f"http://127.0.0.1:{self.proxy_port}/healthz", timeout=1) as response:
+                    lifecycle = json.load(response)["lifecycle"]
+                if lifecycle is not None:
+                    break
+                time.sleep(0.02)
+            self.assertEqual(lifecycle["phase"], "retained_wait")
+            future.result()
 
     def test_healthy_route_clears_reported_wake_error(self) -> None:
         self.start_proxy(ensure_exit=7)

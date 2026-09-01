@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1 - Unreleased
+
+- Show the actual retained-GPU, replacement-rental, workspace-copy, bootstrap,
+  performance-gate, and private-route phases in Pi with phase estimates.
+- Fail over after Vast's scheduling window instead of waiting five minutes for
+  a retained GPU that is no longer available.
+- Prefer Vast's stopped-instance workspace copy for a fresh host. Keep public
+  downloads and compilation as the verified fallback.
+
 ## 0.2.0 - 2026-08-31
 
 - Package the integration for installation with `pi install`.

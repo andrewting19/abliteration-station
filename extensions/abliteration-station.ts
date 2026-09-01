@@ -23,6 +23,13 @@ type Health = {
   idle_seconds?: number;
   idle_limit_seconds?: number;
   last_wake_error?: string | null;
+  lifecycle?: {
+    phase?: string;
+    message?: string;
+    phase_started_unix_ms?: number;
+    eta_seconds?: number | null;
+    instance_id?: number | null;
+  } | null;
 };
 
 function readModelConfig(): ModelConfig {
@@ -84,13 +91,33 @@ export default function (pi: ExtensionAPI) {
   const isStationModel = (ctx: ExtensionContext) =>
     ctx.model?.provider === "abliteration-station" || ctx.model?.id === model.id;
 
-  const renderWake = (ctx: ExtensionContext) => {
+  const renderWake = async (ctx: ExtensionContext) => {
     const elapsed = Math.max(0, Math.floor((Date.now() - wakeStartedAt) / 1000));
-    const message = `Starting Vast and loading Qwen... ${elapsed}s (usually 30-55s)`;
+    let message = `Starting Qwen... ${elapsed}s`;
+    let detail = "Your prompt is queued and will send automatically.";
+    try {
+      const health = await readHealth();
+      const lifecycle = health.lifecycle;
+      if (lifecycle?.message) {
+        const phaseElapsed = lifecycle.phase_started_unix_ms
+          ? Math.max(0, Math.floor((Date.now() - lifecycle.phase_started_unix_ms) / 1000))
+          : elapsed;
+        const eta = lifecycle.eta_seconds;
+        const remaining = typeof eta === "number" ? Math.max(0, eta - phaseElapsed) : null;
+        message = `${lifecycle.message} — ${phaseElapsed}s`;
+        detail = remaining === null
+          ? "Provider completion time is unknown. Your prompt remains queued."
+          : remaining === 0 && phaseElapsed > eta
+            ? "The phase estimate was exceeded. The provider is still working and your prompt remains queued."
+            : `Estimated time remaining for this phase: about ${remaining}s. Your prompt remains queued.`;
+      }
+    } catch {
+      // Keep the local elapsed display if the status request fails.
+    }
     ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("warning", `o ${message}`));
     ctx.ui.setWidget(
       WIDGET_KEY,
-      [ctx.ui.theme.fg("warning", message), ctx.ui.theme.fg("dim", "Your prompt is queued and will send automatically.")],
+      [ctx.ui.theme.fg("warning", message), ctx.ui.theme.fg("dim", detail)],
       { placement: "belowEditor" },
     );
     ctx.ui.setWorkingMessage(message);
@@ -101,9 +128,9 @@ export default function (pi: ExtensionAPI) {
     if (readyTimer !== undefined) clearTimeout(readyTimer);
     readyTimer = undefined;
     wakeStartedAt = Date.now();
-    renderWake(ctx);
+    void renderWake(ctx);
     ctx.ui.notify("The GPU is stopped. Abliteration Station is starting it now.", "info");
-    timer = setInterval(() => renderWake(ctx), 1000);
+    timer = setInterval(() => void renderWake(ctx), 1000);
   };
 
   const clearWakeDisplay = (ctx: ExtensionContext, outcome?: "ready" | "failed") => {
@@ -191,8 +218,10 @@ export default function (pi: ExtensionAPI) {
   pi.registerCommand("abliteration-wake", {
     description: "Start the retained GPU before the next prompt",
     handler: async (_args, ctx) => {
-      ctx.ui.notify("Starting the GPU. This can take 30-55 seconds.", "info");
+      startWakeDisplay(ctx);
+      ctx.ui.notify("Starting the GPU. Pi will show each provider and model phase below the editor.", "info");
       const result = await pi.exec(CLI, ["ensure"], { timeout: 900000 });
+      clearWakeDisplay(ctx, result.code === 0 ? "ready" : "failed");
       ctx.ui.notify(result.code === 0 ? "Qwen is ready." : `GPU start failed: ${result.stderr.trim()}`, result.code === 0 ? "info" : "error");
     },
   });

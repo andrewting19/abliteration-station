@@ -11,13 +11,14 @@ MODEL_URL=${QWEN38_MODEL_URL:-$(jq -r '.providers.vast.upstream' "$CONFIG_FILE")
 PRICE_CAP=${QWEN38_MAX_DPH:-0.53}
 LOCK_FILE=${QWEN38_ENSURE_LOCK:-/run/lock/qwen38-vast-ensure.lock}
 API_KEY_COMMAND=${QWEN38_API_KEY_COMMAND:-$QWEN_VAST_DIR/inference-key}
+PROGRESS_COMMAND=${ABLITERATION_STATION_PROGRESS_COMMAND:-/usr/local/bin/abliteration-station-progress}
 
 die() {
   echo "Abliteration Station start failed: $*" >&2
   exit 1
 }
 
-for required in "$VASTAI" "$QWEN_VAST" "$API_KEY_COMMAND"; do
+for required in "$VASTAI" "$QWEN_VAST" "$API_KEY_COMMAND" "$PROGRESS_COMMAND"; do
   [[ -x "$required" ]] || die "required executable is missing: $required"
 done
 [[ "$PRICE_CAP" =~ ^[0-9]+([.][0-9]+)?$ ]] || die "QWEN38_MAX_DPH must be numeric"
@@ -25,6 +26,7 @@ done
 ensure_lock_timeout_seconds=${QWEN38_ENSURE_LOCK_TIMEOUT_SECONDS:-7200}
 exec 9>"$LOCK_FILE"
 echo "Checking the private Qwen server..." >&2
+"$PROGRESS_COMMAND" checking "Checking the private Qwen route" 10
 flock -w "$ensure_lock_timeout_seconds" 9 ||
   die "another start operation did not finish within ${ensure_lock_timeout_seconds} seconds"
 
@@ -66,6 +68,7 @@ chat_is_ready() {
 }
 
 if model_is_ready; then
+  "$PROGRESS_COMMAND" ready "Qwen is ready" 0
   echo "The private Qwen server is ready." >&2
   exit 0
 fi
@@ -89,9 +92,15 @@ resume_existing() {
     running|loading) ;;
     *)
       echo "Starting retained Vast instance $instance_id..." >&2
+      "$PROGRESS_COMMAND" retained_start "Requesting the retained Vast GPU" 55 "$instance_id"
       start_result=$($VASTAI start instance "$instance_id" --raw 2>&1) || return 1
       printf '%s\n' "$start_result" >&2
       jq -e '.error == true' >/dev/null 2>&1 <<<"$start_result" && return 1
+      if grep -qi 'resources are currently unavailable' <<<"$start_result"; then
+        "$PROGRESS_COMMAND" retained_wait "Waiting briefly for the retained GPU; Vast queued the request" 45 "$instance_id"
+      else
+        "$PROGRESS_COMMAND" retained_boot "Starting Qwen on the retained GPU" 55 "$instance_id"
+      fi
       ;;
   esac
 
@@ -105,10 +114,12 @@ resume_existing() {
 
 if [[ -n "$old_instance_id" ]]; then
   if resume_existing "$old_instance_id"; then
+    "$PROGRESS_COMMAND" ready "Qwen is ready on the retained GPU" 0 "$old_instance_id"
     echo "Retained Qwen instance $old_instance_id is ready." >&2
     exit 0
   fi
   echo "The retained instance could not pass the Q3/262K chat gate. A fresh host is required." >&2
+  "$PROGRESS_COMMAND" replacement_select "The retained GPU is unavailable; selecting a replacement" 30
   $VASTAI stop instance "$old_instance_id" --raw >/dev/null 2>&1 || true
 fi
 
@@ -126,6 +137,7 @@ rollback_new_instance() {
 
 excluded_offer_ids=""
 for rental_attempt in 1 2 3; do
+  "$PROGRESS_COMMAND" replacement_select "Selecting replacement RTX 5090, attempt $rental_attempt of 3" 30
   echo "Rental attempt $rental_attempt of 3: selecting one verified RTX 5090 below \$$PRICE_CAP per hour..." >&2
   if ! created=$(QWEN38_EXCLUDE_OFFER_IDS="$excluded_offer_ids" \
       "$QWEN_VAST" rent-best on-demand "$PRICE_CAP" --rent); then
@@ -145,13 +157,28 @@ for rental_attempt in 1 2 3; do
   fi
 
   printf '%s\n' "$new_instance_id" | install -m 0644 /dev/stdin "$INSTANCE_FILE"
-  echo "Deploying Qwen3.8 Q3 and DFlash on Vast instance $new_instance_id..." >&2
-  if ! "$QWEN_VAST" deploy "$new_instance_id" >&2; then
-    rollback_new_instance "$new_instance_id"
-    continue
+  copied_workspace=0
+  if [[ -n "$old_instance_id" ]]; then
+    echo "Copying the verified Qwen workspace from $old_instance_id to $new_instance_id..." >&2
+    "$PROGRESS_COMMAND" workspace_copy "Copying the verified model workspace inside Vast" 240 "$new_instance_id"
+    if "$QWEN_VAST" copy "$old_instance_id" "$new_instance_id" >&2 &&
+       "$QWEN_VAST" activate-copy "$new_instance_id" >&2; then
+      copied_workspace=1
+    else
+      echo "The provider-side workspace copy failed. Using the public bootstrap fallback." >&2
+    fi
+  fi
+  if (( copied_workspace == 0 )); then
+    echo "Deploying Qwen3.8 Q3 and DFlash on Vast instance $new_instance_id..." >&2
+    "$PROGRESS_COMMAND" public_bootstrap "Downloading and verifying the model workspace" 1800 "$new_instance_id"
+    if ! "$QWEN_VAST" deploy "$new_instance_id" >&2; then
+      rollback_new_instance "$new_instance_id"
+      continue
+    fi
   fi
 
   echo "Running the 120K real-Pi decode gate on Vast instance $new_instance_id..." >&2
+  "$PROGRESS_COMMAND" performance_gate "Testing 120K-context speed and tool use" 180 "$new_instance_id"
   if ! "$QWEN_VAST" performance-gate "$new_instance_id" >&2; then
     echo "Vast instance $new_instance_id did not sustain 80 decode TPS." >&2
     rollback_new_instance "$new_instance_id"
@@ -163,6 +190,7 @@ for rental_attempt in 1 2 3; do
   else
     route_args=("$new_instance_id")
   fi
+  "$PROGRESS_COMMAND" private_route "Restoring the private Tailscale route" 45 "$new_instance_id"
   if ! "$QWEN_VAST" activate-route "${route_args[@]}" >&2; then
     rollback_new_instance "$new_instance_id"
     continue
@@ -171,6 +199,7 @@ for rental_attempt in 1 2 3; do
   for _ in $(seq 1 90); do
     if model_is_ready && chat_is_ready; then
       echo "Fresh Qwen instance $new_instance_id passed the Q3/262K chat gate." >&2
+      "$PROGRESS_COMMAND" ready "Qwen is ready on the replacement GPU" 0 "$new_instance_id"
       if [[ -n "$old_instance_id" ]]; then
         echo "Removing replaced instance $old_instance_id to stop its storage charge." >&2
         $VASTAI destroy instance "$old_instance_id" --yes --raw >/dev/null 2>&1 ||

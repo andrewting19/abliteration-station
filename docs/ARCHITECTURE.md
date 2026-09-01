@@ -22,8 +22,17 @@ request forwarding, request counts, wake serialization, and idle stop.
 
 1. A healthy route exists. The proxy forwards the request.
 2. A retained instance exists. The controller starts it and restores services.
-3. No retained instance exists. The controller rents, builds, benchmarks, and
+3. A retained instance cannot reclaim its GPU within the provider scheduling
+   window. The controller rents a replacement and first asks Vast to copy the
+   verified workspace directly from the stopped instance. It uses public
+   downloads and a rebuild only if that copy fails.
+4. No retained workspace exists. The controller rents, builds, benchmarks, and
    accepts one qualified host.
+
+The local health endpoint reports each wake phase, its start time, and a
+bounded phase estimate. The Pi package shows this state while it keeps the
+prompt queued. An estimate is not reported as a deadline. Pi says when an
+estimate is exceeded and the provider is still working.
 
 A file lock prevents duplicate rentals across processes. A shared Promise in
 the Node.js proxy prevents duplicate wake operations for concurrent requests.
