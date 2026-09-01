@@ -160,7 +160,7 @@ for rental_attempt in 1 2 3; do
 
   printf '%s\n' "$new_instance_id" | install -m 0644 /dev/stdin "$INSTANCE_FILE"
   copied_workspace=0
-  if [[ -n "$old_instance_id" ]]; then
+  if [[ -n "$old_instance_id" && "$USE_PROVIDER_COPY" == 1 ]]; then
     echo "Copying the verified Qwen workspace from $old_instance_id to $new_instance_id..." >&2
     "$PROGRESS_COMMAND" workspace_copy "Copying the verified model workspace inside Vast" 240 "$new_instance_id"
     if "$QWEN_VAST" copy "$old_instance_id" "$new_instance_id" >&2 &&

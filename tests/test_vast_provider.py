@@ -33,6 +33,9 @@ class VastProviderTest(unittest.TestCase):
         self.assertIn("stopped-instance workspace copy failed", script)
         self.assertIn("public bootstrap fallback", ensure)
         self.assertIn("QWEN38_USE_PROVIDER_COPY:-0", ensure)
+        self.assertIn(
+            '[[ -n "$old_instance_id" && "$USE_PROVIDER_COPY" == 1 ]]', ensure
+        )
         self.assertIn("abliteration-station-deferred-gate", ensure)
         self.assertNotIn('"$QWEN_VAST" performance-gate "$new_instance_id"', ensure)
 
