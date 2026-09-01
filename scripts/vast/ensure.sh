@@ -142,9 +142,16 @@ for rental_attempt in 1 2 3; do
   "$PROGRESS_COMMAND" replacement_select "Selecting replacement RTX 5090, attempt $rental_attempt of 3" 30
   echo "Rental attempt $rental_attempt of 3: selecting one verified RTX 5090 below \$$PRICE_CAP per hour..." >&2
   if ! created=$(QWEN38_EXCLUDE_OFFER_IDS="$excluded_offer_ids" \
+      QWEN38_CUDA_MIN=13.2 QWEN38_RENT_BEST_ATTEMPTS=5 \
       "$QWEN_VAST" rent-best on-demand "$PRICE_CAP" --rent); then
-    echo "No usable offer was secured on attempt $rental_attempt." >&2
-    continue
+    echo "No CUDA 13.2 offer was secured. Trying a matching CUDA 13.0 host." >&2
+    "$PROGRESS_COMMAND" replacement_select "No CUDA 13.2 GPU is available; trying CUDA 13.0" 25
+    if ! created=$(QWEN38_EXCLUDE_OFFER_IDS="$excluded_offer_ids" \
+        QWEN38_CUDA_MIN=13.0 QWEN38_RENT_BEST_ATTEMPTS=10 \
+        "$QWEN_VAST" rent-best on-demand "$PRICE_CAP" --rent); then
+      echo "No usable offer was secured on attempt $rental_attempt." >&2
+      continue
+    fi
   fi
   new_instance_id=$(jq -r '.new_contract // empty' <<<"$created")
   offer_id=$(jq -r '.offer_id // empty' <<<"$created")

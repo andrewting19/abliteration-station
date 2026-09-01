@@ -413,7 +413,7 @@ rent_offer() {
   [[ "$confirmation" == "--rent" ]] ||
     die "No rental was made. Add --rent after you review the exact offer and hourly cap."
 
-  local raw price
+  local raw price cuda_max image
   raw=$("$VASTAI" search offers "$QUERY_BASE" \
     --type "$rental_type" --storage 150 --limit 100 -o 'dph+' --raw)
   raw=$(jq --argjson offer_id "$offer_id" --argjson cuda_min "$CUDA_MIN" \
@@ -427,8 +427,17 @@ rent_offer() {
   awk -v p="$price" -v c="$cap" 'BEGIN { exit !(p <= c) }' ||
     die "Live price $price is higher than cap $cap"
 
+  cuda_max=$(jq -r '.[0].cuda_max_good // 0' <<<"$raw")
+  if awk -v value="$cuda_max" 'BEGIN { exit !(value >= 13.2) }'; then
+    image='vastai/base-image:cuda-13.2.1-auto'
+  elif awk -v value="$cuda_max" 'BEGIN { exit !(value >= 13.0) }'; then
+    image='vastai/base-image:cuda-13.0.3-auto'
+  else
+    die "Offer $offer_id does not support CUDA 13.0"
+  fi
+
   local args=(create instance "$offer_id"
-    --image 'vastai/base-image:cuda-13.2.1-auto'
+    --image "$image"
     --disk 150 --ssh --direct --cancel-unavail
     --label qwen38-q3
     --onstart "$SCRIPT_DIR/vast-onstart.sh")
@@ -453,6 +462,8 @@ rent_best() {
     die "No rental was made. Add --rent after you review the hourly cap."
 
   local attempt raw offer_id result rc selector
+  local rent_attempts=${QWEN38_RENT_BEST_ATTEMPTS:-20}
+  [[ "$rent_attempts" =~ ^[1-9][0-9]*$ ]] || die "QWEN38_RENT_BEST_ATTEMPTS must be a positive integer"
   local excluded_offer_ids=${QWEN38_EXCLUDE_OFFER_IDS:-}
   if [[ "$rental_type" == "bid" ]]; then
     selector='map(select(.min_bid <= $cap) | select(.id as $id | (($excluded | split(",")) | index($id | tostring) | not))) | sort_by(.min_bid, -.pcie_bw, -.reliability) | .[0].id // empty'
@@ -460,7 +471,7 @@ rent_best() {
     selector='map(select(.dph_total <= $cap) | select(.id as $id | (($excluded | split(",")) | index($id | tostring) | not))) | sort_by(.dph_total, -.pcie_bw, -.reliability) | .[0].id // empty'
   fi
 
-  for attempt in $(seq 1 20); do
+  for attempt in $(seq 1 "$rent_attempts"); do
     raw=$("$VASTAI" search offers "$QUERY_BASE" \
       --type "$rental_type" --storage 150 --limit 50 -o 'dph+' --raw)
     offer_id=$(jq -r --argjson cap "$cap" --argjson cuda_min "$CUDA_MIN" \
@@ -488,7 +499,7 @@ rent_best() {
     fi
     sleep 1
   done
-  die "No offer could be secured after 20 fresh attempts"
+  die "No offer could be secured after $rent_attempts fresh attempts"
 }
 
 rent_performance() {

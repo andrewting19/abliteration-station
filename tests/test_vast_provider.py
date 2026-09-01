@@ -152,6 +152,66 @@ class VastProviderTest(unittest.TestCase):
             self.assertEqual(json.loads(result.stdout)["offer_id"], 202)
             self.assertEqual(calls.read_text(encoding="utf-8").splitlines(), ["101", "202"])
 
+    def test_cuda_13_0_offer_uses_matching_base_image(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            home = root / "home"
+            (home / ".config" / "vastai").mkdir(parents=True)
+            (home / ".config" / "vastai" / "vast_api_key").write_text(
+                "test-only\n", encoding="utf-8"
+            )
+            arguments = root / "arguments"
+            fake = root / "vastai"
+            fake.write_text(
+                "#!/usr/bin/env python3\n"
+                "import json, sys\n"
+                f"arguments = {str(arguments)!r}\n"
+                "args = sys.argv[1:]\n"
+                "if args[:2] == ['search', 'offers']:\n"
+                "    print(json.dumps([{'id': 303, 'dph_total': 0.4, "
+                "'cuda_max_good': 13.0, 'pcie_bw': 45, 'reliability': 0.99}]))\n"
+                "elif args[:2] == ['create', 'instance']:\n"
+                "    open(arguments, 'w').write('\\n'.join(args))\n"
+                "    print(json.dumps({'success': True, 'new_contract': 404}))\n"
+                "else:\n"
+                "    raise SystemExit('unexpected arguments: ' + repr(args))\n",
+                encoding="utf-8",
+            )
+            fake.chmod(0o755)
+            environment = os.environ.copy()
+            environment.update(
+                {
+                    "HOME": str(home),
+                    "VASTAI": str(fake),
+                    "QWEN38_CUDA_MIN": "13.0",
+                    "QWEN38_RENT_BEST_ATTEMPTS": "1",
+                }
+            )
+            subprocess.run(
+                [
+                    str(ROOT / "scripts" / "vast" / "qwen-vast"),
+                    "rent-best",
+                    "on-demand",
+                    "0.53",
+                    "--rent",
+                ],
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=True,
+            )
+            value = arguments.read_text(encoding="utf-8").splitlines()
+            self.assertIn("vastai/base-image:cuda-13.0.3-auto", value)
+
+    def test_ensure_falls_back_from_cuda_13_2_to_cuda_13_0(self) -> None:
+        ensure = (ROOT / "scripts" / "vast" / "ensure.sh").read_text(
+            encoding="utf-8"
+        )
+        first = ensure.index("QWEN38_CUDA_MIN=13.2")
+        fallback = ensure.index("QWEN38_CUDA_MIN=13.0")
+        self.assertLess(first, fallback)
+        self.assertIn("No CUDA 13.2 GPU is available", ensure)
+
     def test_retained_start_grace_fails_over_after_provider_scheduling_window(self) -> None:
         script = (ROOT / "scripts" / "vast" / "qwen-vast").read_text(
             encoding="utf-8"
