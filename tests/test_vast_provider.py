@@ -121,6 +121,7 @@ class VastProviderTest(unittest.TestCase):
                 "test-only\n", encoding="utf-8"
             )
             calls = root / "calls"
+            failed_offers = root / "failed-offers"
             fake = root / "vastai"
             offers = [
                 {
@@ -159,7 +160,13 @@ class VastProviderTest(unittest.TestCase):
             )
             fake.chmod(0o755)
             environment = os.environ.copy()
-            environment.update({"HOME": str(home), "VASTAI": str(fake)})
+            environment.update(
+                {
+                    "HOME": str(home),
+                    "VASTAI": str(fake),
+                    "QWEN38_FAILED_OFFERS_FILE": str(failed_offers),
+                }
+            )
             result = subprocess.run(
                 [
                     str(ROOT / "scripts" / "vast" / "qwen-vast"),
@@ -175,6 +182,7 @@ class VastProviderTest(unittest.TestCase):
             )
             self.assertEqual(json.loads(result.stdout)["offer_id"], 202)
             self.assertEqual(calls.read_text(encoding="utf-8").splitlines(), ["101", "202"])
+            self.assertEqual(failed_offers.read_text(encoding="utf-8").splitlines(), ["101"])
 
     def test_cuda_13_0_offer_uses_matching_base_image(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -235,6 +243,7 @@ class VastProviderTest(unittest.TestCase):
         fallback = ensure.index("QWEN38_CUDA_MIN=13.0")
         self.assertLess(first, fallback)
         self.assertIn("No CUDA 13.2 GPU is available", ensure)
+        self.assertIn('sort -nu "$failed_offers_file" | paste -sd, -', ensure)
 
     def test_retained_start_grace_fails_over_after_provider_scheduling_window(self) -> None:
         script = (ROOT / "scripts" / "vast" / "qwen-vast").read_text(

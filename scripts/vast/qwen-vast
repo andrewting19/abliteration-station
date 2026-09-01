@@ -463,6 +463,7 @@ rent_best() {
 
   local attempt raw offer_id result rc selector
   local rent_attempts=${QWEN38_RENT_BEST_ATTEMPTS:-20}
+  local failed_offers_file=${QWEN38_FAILED_OFFERS_FILE:-}
   [[ "$rent_attempts" =~ ^[1-9][0-9]*$ ]] || die "QWEN38_RENT_BEST_ATTEMPTS must be a positive integer"
   local excluded_offer_ids=${QWEN38_EXCLUDE_OFFER_IDS:-}
   if [[ "$rental_type" == "bid" ]]; then
@@ -492,6 +493,9 @@ rent_best() {
       return 0
     fi
     echo "Offer $offer_id was not secured: $result" >&2
+    if [[ -n "$failed_offers_file" ]]; then
+      printf '%s\n' "$offer_id" >>"$failed_offers_file"
+    fi
     if [[ -n "$excluded_offer_ids" ]]; then
       excluded_offer_ids+=",$offer_id"
     else

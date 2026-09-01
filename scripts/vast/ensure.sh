@@ -39,6 +39,13 @@ release_inhibit() {
 }
 trap release_inhibit EXIT
 
+failed_offers_file=$(mktemp /run/abliteration-station/failed-offers.XXXXXX)
+cleanup() {
+  rm -f "$failed_offers_file"
+  release_inhibit
+}
+trap cleanup EXIT
+
 api_key=$($API_KEY_COMMAND)
 
 model_is_ready() {
@@ -142,13 +149,17 @@ for rental_attempt in 1 2 3; do
   "$PROGRESS_COMMAND" replacement_select "Selecting replacement RTX 5090, attempt $rental_attempt of 3" 30
   echo "Rental attempt $rental_attempt of 3: selecting one verified RTX 5090 below \$$PRICE_CAP per hour..." >&2
   if ! created=$(QWEN38_EXCLUDE_OFFER_IDS="$excluded_offer_ids" \
+      QWEN38_FAILED_OFFERS_FILE="$failed_offers_file" \
       QWEN38_CUDA_MIN=13.2 QWEN38_RENT_BEST_ATTEMPTS=5 \
       "$QWEN_VAST" rent-best on-demand "$PRICE_CAP" --rent); then
+    excluded_offer_ids=$(sort -nu "$failed_offers_file" | paste -sd, -)
     echo "No CUDA 13.2 offer was secured. Trying a matching CUDA 13.0 host." >&2
     "$PROGRESS_COMMAND" replacement_select "No CUDA 13.2 GPU is available; trying CUDA 13.0" 25
     if ! created=$(QWEN38_EXCLUDE_OFFER_IDS="$excluded_offer_ids" \
+        QWEN38_FAILED_OFFERS_FILE="$failed_offers_file" \
         QWEN38_CUDA_MIN=13.0 QWEN38_RENT_BEST_ATTEMPTS=10 \
         "$QWEN_VAST" rent-best on-demand "$PRICE_CAP" --rent); then
+      excluded_offer_ids=$(sort -nu "$failed_offers_file" | paste -sd, -)
       echo "No usable offer was secured on attempt $rental_attempt." >&2
       continue
     fi
