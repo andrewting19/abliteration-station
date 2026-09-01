@@ -16,6 +16,26 @@ ROOT = Path(__file__).parents[1]
 
 
 class VastProviderTest(unittest.TestCase):
+    def test_fast_bootstrap_uses_verified_release_artifacts(self) -> None:
+        manifest = (ROOT / "scripts" / "vast" / "portable-manifest.env").read_text(
+            encoding="utf-8"
+        )
+        bootstrap = (ROOT / "scripts" / "vast" / "bootstrap-fresh-vast.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("releases/download/bootstrap-artifacts-v1", manifest)
+        self.assertIn(
+            "daa23afe7c2f9e56688548cd6dd48807dcb4ec81562503e0312e3bef8cf9def0",
+            manifest,
+        )
+        self.assertIn("${CUDA_VERSION:-} == 13.2*", bootstrap)
+        self.assertIn("draft_artifact_pid=$!", bootstrap)
+        self.assertLess(
+            bootstrap.index("draft_artifact_pid=$!"),
+            bootstrap.index('"$QWEN38_TARGET_REPO"'),
+        )
+        self.assertIn("The portable Q4 draft download failed", bootstrap)
+
     def test_selector_accepts_32_gb_system_ram_hosts(self) -> None:
         script = (ROOT / "scripts" / "vast" / "qwen-vast").read_text(
             encoding="utf-8"

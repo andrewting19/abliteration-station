@@ -47,12 +47,32 @@ if [[ "$CURRENT_TREE" != "$QWEN38_LLAMA_EXPECTED_TREE" ]]; then
 fi
 
 BUILD_NAME=build-cuda13-master
-BUILD_CACHE_NAME=llama-build-cuda13-sm120a.tar.zst
+BUILD_CACHE_NAME=$QWEN38_BUILD_CACHE_FILE
 BUILD_PROFILE=portable-sm120a
 BUILD_NATIVE=OFF
 BUILD_DIR="$LLAMA_DIR/$BUILD_NAME"
 BUILD_CACHE="$SCRIPT_DIR/$BUILD_CACHE_NAME"
 BUILD_CACHE_SHA="$BUILD_CACHE.sha256"
+
+if [[ ${CUDA_VERSION:-} == 13.2* && ! -s "$BUILD_CACHE" ]]; then
+  if aria2c \
+    --allow-overwrite=true \
+    --auto-file-renaming=false \
+    --console-log-level=warn \
+    --file-allocation=none \
+    --max-connection-per-server=8 \
+    --min-split-size=8M \
+    --split=8 \
+    --dir "$SCRIPT_DIR" \
+    --out "$BUILD_CACHE_NAME" \
+    "$QWEN38_ARTIFACT_BASE_URL/$BUILD_CACHE_NAME" &&
+     echo "$QWEN38_BUILD_CACHE_SHA256  $BUILD_CACHE" | sha256sum -c -; then
+    printf '%s  %s\n' "$QWEN38_BUILD_CACHE_SHA256" "$BUILD_CACHE_NAME" >"$BUILD_CACHE_SHA"
+  else
+    echo "The portable runtime download failed. Building from the pinned source." >&2
+    rm -f "$BUILD_CACHE" "$BUILD_CACHE_SHA"
+  fi
+fi
 
 build_matches_source() {
   local binary=$1
@@ -96,12 +116,10 @@ build_matches_source "$BUILD_DIR/bin/llama-server" || {
   exit 1
 }
 
-download_hf_file() {
-  local repo=$1
-  local revision=$2
-  local file=$3
-  local expected_sha=$4
-  local destination=$5
+download_url_file() {
+  local url=$1
+  local expected_sha=$2
+  local destination=$3
   local partial="${destination}.part"
 
   if [[ -f "$destination" ]] && echo "$expected_sha  $destination" | sha256sum -c - >/dev/null 2>&1; then
@@ -120,17 +138,44 @@ download_hf_file() {
     --summary-interval=10 \
     --dir "$(dirname -- "$partial")" \
     --out "$(basename -- "$partial")" \
-    "https://huggingface.co/${repo}/resolve/${revision}/${file}?download=true"
+    "$url"
   echo "$expected_sha  $partial" | sha256sum -c -
   mv "$partial" "$destination"
+}
+
+download_hf_file() {
+  local repo=$1
+  local revision=$2
+  local file=$3
+  local expected_sha=$4
+  local destination=$5
+  download_url_file \
+    "https://huggingface.co/${repo}/resolve/${revision}/${file}?download=true" \
+    "$expected_sha" "$destination"
 }
 
 TARGET_PATH="$QWEN38_ROOT/models/$QWEN38_TARGET_FILE"
 DRAFT_BF16_PATH="$QWEN38_ROOT/models/$QWEN38_DRAFT_BF16_FILE"
 DRAFT_Q4_PATH="$QWEN38_ROOT/models/$QWEN38_DRAFT_Q4_FILE"
 
+draft_artifact_pid=""
+if [[ ! -f "$DRAFT_Q4_PATH" ]] ||
+   ! echo "$QWEN38_DRAFT_Q4_SHA256  $DRAFT_Q4_PATH" | sha256sum -c - >/dev/null 2>&1; then
+  download_url_file \
+    "$QWEN38_ARTIFACT_BASE_URL/$QWEN38_DRAFT_Q4_FILE" \
+    "$QWEN38_DRAFT_Q4_SHA256" "$DRAFT_Q4_PATH" &
+  draft_artifact_pid=$!
+fi
+
 download_hf_file \
   "$QWEN38_TARGET_REPO" "$QWEN38_TARGET_REVISION" "$QWEN38_TARGET_FILE" "$QWEN38_TARGET_SHA256" "$TARGET_PATH"
+
+if [[ -n "$draft_artifact_pid" ]]; then
+  if ! wait "$draft_artifact_pid"; then
+    echo "The portable Q4 draft download failed. Using the BF16 fallback." >&2
+    rm -f "${DRAFT_Q4_PATH}.part" "$DRAFT_Q4_PATH"
+  fi
+fi
 
 if [[ -f "$DRAFT_Q4_PATH" ]] &&
    echo "$QWEN38_DRAFT_Q4_SHA256  $DRAFT_Q4_PATH" | sha256sum -c - >/dev/null 2>&1; then
