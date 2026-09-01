@@ -6,6 +6,7 @@ source "$SCRIPT_DIR/portable-manifest.env"
 VASTAI=${VASTAI:-$SCRIPT_DIR/.vast-venv/bin/vastai}
 SSH_KEY=${QWEN38_SSH_KEY:-$HOME/.ssh/abliteration-station-vast}
 INSTANCE_FILE=${ABLITERATION_STATION_INSTANCE_FILE:-/var/lib/abliteration-station/vast-instance-id}
+PROGRESS_COMMAND=${ABLITERATION_STATION_PROGRESS_COMMAND:-/usr/local/bin/abliteration-station-progress}
 QUERY_BASE='gpu_name=RTX_5090 num_gpus=1 verified=True rentable=True reliability>=0.98 direct_port_count>=1 cpu_ram>=32 disk_space>=150 cuda_vers>=13 dlperf>=190 duration>=30'
 CUDA_MIN=${QWEN38_CUDA_MIN:-13.2}
 QUERY_PERFORMANCE="$QUERY_BASE pcie_bw>=45"
@@ -14,6 +15,11 @@ QUERY_BALANCED="$QUERY_BASE pcie_bw>=25"
 die() {
   echo "$*" >&2
   exit 1
+}
+
+progress() {
+  [[ -x "$PROGRESS_COMMAND" ]] || return 0
+  "$PROGRESS_COMMAND" "$1" "$2" "$3" "${4:-null}" >/dev/null
 }
 
 need_tools() {
@@ -84,7 +90,8 @@ wait_ssh() {
   local retained_start=${QWEN38_RETAINED_START:-0}
   local deadline=$((SECONDS + 900))
   local retained_deadline=$((SECONDS + stopped_start_grace_seconds))
-  local instance_json host port actual_status intended_status running_since=0 stopped_since=0
+  local instance_json host port actual_status intended_status status_message
+  local running_since=0 stopped_since=0 last_progress=""
   while (( SECONDS < deadline )); do
     instance_json=$("$VASTAI" show instance "$instance_id" --raw 2>/dev/null || true)
     if jq -e '.error == true and .status_code == 404' >/dev/null 2>&1 <<<"$instance_json"; then
@@ -92,6 +99,18 @@ wait_ssh() {
     fi
     actual_status=$(jq -r '.actual_status // empty' <<<"$instance_json" 2>/dev/null || true)
     intended_status=$(jq -r '.intended_status // empty' <<<"$instance_json" 2>/dev/null || true)
+    status_message=$(jq -r '.status_msg // empty' <<<"$instance_json" 2>/dev/null |
+      tr '\r\n\t' '   ' | tr -cd '[:print:]' | cut -c1-120)
+    if [[ "$actual_status" == loading ]]; then
+      [[ -n "$status_message" ]] || status_message="Vast is preparing the CUDA base image"
+      if [[ "loading:$status_message" != "$last_progress" ]]; then
+        progress provider_image "$status_message" 180 "$instance_id"
+        last_progress="loading:$status_message"
+      fi
+    elif [[ "$actual_status" == running && "$last_progress" != running ]]; then
+      progress provider_ssh "The container is running; waiting for private SSH" 30 "$instance_id"
+      last_progress=running
+    fi
     if [[ "$retained_start" == 1 && "$actual_status" != running ]] &&
        (( SECONDS >= retained_deadline )); then
       die "Vast did not return the retained GPU within ${stopped_start_grace_seconds} seconds"
