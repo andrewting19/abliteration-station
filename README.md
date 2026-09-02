@@ -8,7 +8,7 @@ OpenAI-compatible Qwen model on a rented Vast.ai GPU. It starts compute on
 demand, keeps an open Pi session usable after idle shutdown, and stops paid GPU
 compute after ten minutes without an inference request.
 
-Version 0.2 is an alpha release. It is an official Pi package with a
+Version 0.3 is an alpha release. It is an official Pi package with a
 configurable provider adapter and
 model profile boundary, but supports one fully tested deployment profile:
 
@@ -31,11 +31,14 @@ When Pi sends an inference request, the local proxy does this work:
 1. It reuses a healthy route, or starts the retained Vast instance.
 2. If no retained instance exists, it rents one qualified RTX 5090 below the
    configured price cap.
-3. It installs the pinned runtime and verifies model file hashes.
-4. It requires exact model, quantization, context, chat, and long-context speed
-   gates before it accepts a fresh host.
+3. It downloads a verified portable runtime when the host supports it. A
+   pinned source build remains the fallback.
+4. It verifies the exact model, quantization, context, and chat behavior before
+   it accepts a fresh host.
 5. It forwards the original request after the model is ready.
-6. It stops GPU compute after the idle limit. It does not delete retained data.
+6. When the route becomes idle, it runs the long-context speed and tool gates
+   without delaying the first interactive response.
+7. It stops GPU compute after the idle limit. It does not delete retained data.
 
 Concurrent requests share one start operation. A Pi extension shows the wake
 state and elapsed time. Pressing Escape cancels the forwarded HTTP request.
@@ -54,16 +57,18 @@ installer currently requires root and systemd.
 - a reusable Tailscale auth key
 - at least 150 GB of disk on the rented host
 
-The first fresh deployment can take a long time. It downloads two model files,
-builds llama.cpp, quantizes the draft model, and runs a long-context speed gate.
-A retained Vast instance normally starts much faster.
+The first fresh deployment can take several minutes. It downloads and verifies
+the target model, a portable DFlash draft, and a pinned CUDA runtime. If a
+portable artifact is not compatible or available, it builds llama.cpp from the
+pinned source and can quantize the draft locally. A retained Vast instance
+normally starts much faster.
 
 ## Install
 
 Install the package from GitHub:
 
 ```sh
-pi install git:github.com/andrewting19/abliteration-station@v0.2.0
+pi install git:github.com/andrewting19/abliteration-station@v0.3.0
 ```
 
 Start Pi and run `/abliteration-setup`. On a root-based Pi server, this
@@ -162,9 +167,13 @@ The default test does not rent a GPU. The paid hardware acceptance test is in
 
 ## Limits
 
-- Version 0.2 supports only Vast.ai and one RTX 5090 profile.
+- Version 0.3 supports only Vast.ai and one RTX 5090 profile.
 - The installer supports root-based Linux systems with systemd.
-- A fresh host performs a source build. There is no public binary build cache.
+- The fast portable CUDA runtime is limited to the verified CUDA 13.2 RTX 5090
+  profile. Other compatible hosts use the pinned source-build fallback.
+- The long-context performance gate runs after the first interactive request.
+  A newly routed host can therefore respond before its deferred performance
+  result is available.
 - One model slot is configured. Parallel long-context requests compete for it.
 - The lifecycle code can stop or rent compute. Review the price cap first.
 

@@ -1,12 +1,21 @@
 # Changelog
 
-## 0.3.0 - Unreleased
+## 0.3.0 - 2026-09-02
 
 - Remove the failed provider-copy experiment from the default request path.
 - Move the 120K performance and tool gate after first-token recovery and run it
   only after the route becomes idle.
 - Report dependency, runtime, target-download, draft-download, quantization,
   model-load, and route phases separately in Pi.
+- Accept viable hosts with at least 32 GB of system RAM and try CUDA 13.0 when
+  no CUDA 13.2 offer can be secured below the configured price cap.
+- Carry rejected offer IDs across CUDA tiers and reject fresh containers that
+  do not become usable within five minutes.
+- Download verified RTX 5090 runtime and Q4 draft artifacts. Keep the pinned
+  source-build and BF16-draft paths as verified fallbacks.
+- Skip the source clone when the verified runtime cache matches the pinned
+  source tree.
+- Store deferred performance-gate results in the service state directory.
 
 ## 0.2.2 - 2026-09-01
 

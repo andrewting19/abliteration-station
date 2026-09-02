@@ -27,20 +27,22 @@ is connected to the same tailnet. Run `tailscale status` and look for
 
 ## A fresh deployment is slow
 
-This is expected. A fresh host downloads and verifies the model files, builds a
-pinned CUDA runtime, quantizes the draft model, and runs a long-context speed
-test. The launcher prints each provider stage to the terminal. If there is no
-new output for five minutes, inspect the service journal and Vast instance
-state with the commands above. Keep the Vast instance stopped instead of
-deleting it if you want the
-faster retained-instance start path. Retained storage can still cost money.
+This can occur when Vast must prepare a new container or the host has a slow
+network path. A CUDA 13.2 RTX 5090 host downloads verified model, runtime, and
+draft artifacts. If an artifact is unavailable or incompatible, the bootstrap
+uses the pinned source-build or BF16-draft fallback. The launcher prints each
+provider stage to the terminal. If there is no new output for five minutes,
+inspect the service journal and Vast instance state with the commands above.
+Keep the Vast instance stopped instead of deleting it if you want the faster
+retained-instance start path. Retained storage can still cost money.
 
 ## The long-context speed gate fails
 
 The model is sensitive to CPU speed, PCIe bandwidth, and disk speed. The
-controller rejects a host below 80 decode tokens per second. Raise the price cap
-or wait for a better offer. Do not lower the gate unless you accept lower agent
-speed.
+deferred gate records a failure below 80 decode tokens per second. Inspect
+`/var/lib/abliteration-station/performance-gates/` and stop the host if it does
+not meet your requirement. Raise the price cap or wait for a better offer. Do
+not lower the gate unless you accept lower agent speed.
 
 ## Pi reports a context error
 

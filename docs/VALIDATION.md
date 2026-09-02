@@ -14,16 +14,25 @@
 - full-history Gitleaks scanning in CI;
 - scans for private addresses, credentials, personal host names, and artifacts.
 
-## Paid hardware gate
+## Paid hardware gates
 
-The first fresh host must pass these checks before the controller records it:
+The first fresh host must pass these checks before the controller records its
+route:
 
 1. The exact Q3 model and Q4 draft files match pinned SHA-256 values.
 2. The llama.cpp source tree matches the pinned tree hash.
 3. The endpoint reports Q3 and 262,144 tokens of context.
 4. A native medium-thinking chat request returns content.
-5. A synthetic long-context replay sustains at least 80 decode tokens per
+
+After the first interactive request finishes and the route is idle, the
+deferred acceptance worker runs these checks:
+
+1. A synthetic 120K-context replay sustains at least 80 decode tokens per
    second.
+2. A two-step tool loop returns the required tool call and final answer.
+
+The deferred result records host-selection evidence. It does not delay the
+first response and does not claim that every real Pi workload reaches 80 TPS.
 
 ## Reference acceptance result
 
@@ -49,7 +58,8 @@ For each release, test the package from its exact Git commit:
 7. After paid compute stops, a prompt in an open Pi session starts the retained
    GPU and returns output without a Pi restart.
 
-Commit `da334d48da973e1608d30213692da860b81f17c6` passed all seven items.
+Commit `da334d48da973e1608d30213692da860b81f17c6` passed all seven items for
+version 0.2.
 The real request returned `PACKAGE_OK`. The bounded cancellation request was
 recorded as cancelled after 3.34 seconds. The final retained wake used the same
 open Pi process and the same Vast instance. Pi showed the queued prompt and
@@ -60,5 +70,5 @@ at 112.60 decode tokens per second.
 
 ## Release boundary
 
-Version 0.2 does not claim support for other providers, GPUs, operating systems,
+Version 0.3 does not claim support for other providers, GPUs, operating systems,
 model variants, or multiple concurrent long-context slots.
