@@ -42,6 +42,23 @@ and a 117,046-token workload. It reached 119.0 decode tokens per second. A
 retained-instance path has reached the model in about 30 to 47 seconds when
 Vast can return the same GPU. Results vary by host.
 
+## Version 0.3 release candidate
+
+Runtime commit `36a1bb11ea2e2addbad493b7d48af7c716ca6b20` completed a fresh
+deployment on Vast instance `49596277`. The bootstrap used the verified cached
+RTX 5090 runtime, verified the Q3 target and Q4 draft, reported a healthy
+262,144-token endpoint, passed the native-thinking chat gate, and removed the
+replaced instance. The model downloads were network-bound. The draft transfer
+took approximately 18 minutes on this host, so version 0.3 does not promise a
+fixed fresh-start time.
+
+A real Pi turn at 146,287 input tokens completed with HTTP 200. It measured
+1,289.9 prompt tokens per second and 75.0 decode tokens per second for 568
+output tokens. The retained-GPU wake took 65.9 seconds, time to first response
+byte was 103.7 seconds, and total request time was 194.7 seconds. This real
+turn is workload evidence, not an 80-TPS guarantee. The 80-TPS requirement
+applies to the fixed deferred acceptance workload.
+
 ## Pi package acceptance
 
 For each release, test the package from its exact Git commit:
