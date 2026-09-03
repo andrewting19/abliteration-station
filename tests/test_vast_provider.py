@@ -325,7 +325,7 @@ class VastProviderTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn(
-            "ghcr.io/andrewting19/abliteration-station-runtime:cuda13.2-v2",
+            "ghcr.io/andrewting19/abliteration-station-runtime:cuda13.2-v3",
             script,
         )
         self.assertIn("image=$RUNTIME_IMAGE", script)
