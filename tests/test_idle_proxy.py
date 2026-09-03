@@ -152,6 +152,22 @@ class IdleProxyTest(unittest.TestCase):
         self.assertEqual(results, [{"ok": True}, {"ok": True}])
         self.assertEqual(count.read_text(encoding="utf-8"), "x")
 
+    def test_dead_saved_route_is_replaced_instead_of_hanging(self) -> None:
+        count, _stop_count = self.start_proxy()
+        dead_port = free_port()
+        route = self.root / "route.json"
+        route.write_text(
+            json.dumps({
+                "provider": "fake",
+                "upstream": f"http://127.0.0.1:{dead_port}",
+                "identity": {"instance_id": "dead"},
+            }),
+            encoding="utf-8",
+        )
+        self.assertEqual(self.request(), {"ok": True})
+        self.assertEqual(count.read_text(encoding="utf-8"), "x")
+        self.assertEqual(json.loads(route.read_text(encoding="utf-8"))["identity"], {})
+
     def test_wake_failure_is_clear_and_does_not_forward(self) -> None:
         self.start_proxy(ensure_exit=7)
         with self.assertRaises(urllib.error.HTTPError) as caught:

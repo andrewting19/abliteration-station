@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import http from "node:http";
 import crypto from "node:crypto";
+import net from "node:net";
 import { spawn } from "node:child_process";
 
 const listenHost = process.env.ABLITERATION_STATION_PROXY_HOST ?? "127.0.0.1";
@@ -45,6 +46,42 @@ function readProgress() {
     return JSON.parse(fs.readFileSync(progressFile, "utf8"));
   } catch {
     return null;
+  }
+}
+
+function routeIsReachable(route) {
+  let upstream;
+  try {
+    upstream = new URL(route.upstream);
+  } catch {
+    return Promise.resolve(false);
+  }
+  const port = Number(upstream.port || (upstream.protocol === "https:" ? 443 : 80));
+  return new Promise((resolve) => {
+    const socket = net.createConnection({ host: upstream.hostname, port });
+    let settled = false;
+    const finish = (reachable) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve(reachable);
+    };
+    socket.setTimeout(2000);
+    socket.once("connect", () => finish(true));
+    socket.once("timeout", () => finish(false));
+    socket.once("error", () => finish(false));
+  });
+}
+
+function removeRouteIfUnchanged(staleRoute) {
+  try {
+    const current = readRoute();
+    if (
+      current.upstream === staleRoute.upstream &&
+      JSON.stringify(current.identity ?? {}) === JSON.stringify(staleRoute.identity ?? {})
+    ) fs.unlinkSync(routeFile);
+  } catch {
+    // The route was already removed or replaced.
   }
 }
 
@@ -97,8 +134,12 @@ function stopIdleProvider(snapshot) {
 async function ensureRoute() {
   try {
     const route = readRoute();
-    lastWakeError = null;
-    return route;
+    if (await routeIsReachable(route)) {
+      lastWakeError = null;
+      return route;
+    }
+    console.error("The saved private route is not reachable. Starting a replacement GPU.");
+    removeRouteIfUnchanged(route);
   } catch {
     // Continue to the serialized wake path.
   }

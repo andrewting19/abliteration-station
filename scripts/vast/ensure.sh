@@ -203,7 +203,8 @@ for rental_attempt in $(seq 1 "$FRESH_RENTAL_ATTEMPTS"); do
   fi
   if (( copied_workspace == 0 )); then
     echo "Deploying Qwen3.8 Q3 and DFlash on Vast instance $new_instance_id..." >&2
-    "$PROGRESS_COMMAND" public_bootstrap "Downloading and verifying the model workspace" 1800 "$new_instance_id"
+    "$PROGRESS_COMMAND" public_bootstrap \
+      "Starting the pinned Qwen image; an uncached first pull can take longer" 90 "$new_instance_id"
     deploy_env=()
     if [[ -z "$old_instance_id" ]]; then
       deploy_env+=(QWEN38_ACTIVATE_TAILSCALE_STATE=1)

@@ -40,3 +40,21 @@ The fused-runtime candidate also passed these additional gates:
 The speed target is an optimization objective. Quality, safe fallback, and
 correct cache identity are hard gates. A short response is not sufficient
 evidence for a decode-speed promotion.
+
+## Fresh-instance time to first token
+
+The pinned-image path passed the fresh-instance gate on 2026-09-03:
+
+- [x] Start with no live or usable retained Vast instance.
+- [x] Rent a fresh RTX 5090 and activate the private Tailscale route.
+- [x] Keep Qwen3.8-27B Unleashed Q3_K_XL, Q4_0 DFlash, 262,144 context,
+  temperature 1.0, and native medium thinking.
+- [x] Send a captured real Pi request with 145,211 prompt tokens and no KV
+  cache reuse.
+- [x] Stream the first token in less than 180 seconds.
+- [x] Pass the response quality check and the release test suite.
+
+The measured result was 177.15 seconds to the first token, 1,492 prompt TPS,
+and 74.4 decode TPS. The selected Vast machine already had the pinned runtime
+image in its host image cache. This result does not claim that the first image
+pull on an arbitrary host finishes in less than three minutes.
