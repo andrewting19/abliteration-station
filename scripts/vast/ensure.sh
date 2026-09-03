@@ -16,6 +16,7 @@ DEFERRED_GATE_COMMAND=${ABLITERATION_STATION_DEFERRED_GATE_COMMAND:-/usr/local/b
 USE_PROVIDER_COPY=${QWEN38_USE_PROVIDER_COPY:-0}
 ALLOW_CUDA_13_0_FALLBACK=${QWEN38_ALLOW_CUDA_13_0_FALLBACK:-1}
 FRESH_RENTAL_ATTEMPTS=${QWEN38_FRESH_RENTAL_ATTEMPTS:-3}
+OFFER_ACQUIRE_ATTEMPTS=${QWEN38_OFFER_ACQUIRE_ATTEMPTS:-5}
 
 die() {
   echo "Abliteration Station start failed: $*" >&2
@@ -148,6 +149,8 @@ rollback_new_instance() {
 
 [[ "$FRESH_RENTAL_ATTEMPTS" =~ ^[1-3]$ ]] ||
   die "QWEN38_FRESH_RENTAL_ATTEMPTS must be 1, 2, or 3"
+[[ "$OFFER_ACQUIRE_ATTEMPTS" =~ ^[1-9][0-9]*$ ]] ||
+  die "QWEN38_OFFER_ACQUIRE_ATTEMPTS must be a positive integer"
 
 excluded_offer_ids=""
 for rental_attempt in $(seq 1 "$FRESH_RENTAL_ATTEMPTS"); do
@@ -155,7 +158,7 @@ for rental_attempt in $(seq 1 "$FRESH_RENTAL_ATTEMPTS"); do
   echo "Rental attempt $rental_attempt of $FRESH_RENTAL_ATTEMPTS: selecting one verified RTX 5090 below \$$PRICE_CAP per hour..." >&2
   if ! created=$(QWEN38_EXCLUDE_OFFER_IDS="$excluded_offer_ids" \
       QWEN38_FAILED_OFFERS_FILE="$failed_offers_file" \
-      QWEN38_CUDA_MIN=13.2 QWEN38_RENT_BEST_ATTEMPTS=5 \
+      QWEN38_CUDA_MIN=13.2 QWEN38_RENT_BEST_ATTEMPTS="$OFFER_ACQUIRE_ATTEMPTS" \
       "$QWEN_VAST" rent-best on-demand "$PRICE_CAP" --rent); then
     excluded_offer_ids=$(sort -nu "$failed_offers_file" | paste -sd, -)
     if [[ "$ALLOW_CUDA_13_0_FALLBACK" == 1 ]]; then

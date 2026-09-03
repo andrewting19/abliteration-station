@@ -205,6 +205,11 @@ class VastProviderTest(unittest.TestCase):
             (home / ".config" / "vastai" / "vast_api_key").write_text(
                 "test-only\n", encoding="utf-8"
             )
+            (home / ".ssh").mkdir()
+            (home / ".ssh" / "abliteration-station-vast.pub").write_text(
+                "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest test\n",
+                encoding="utf-8",
+            )
             calls = root / "calls"
             failed_offers = root / "failed-offers"
             fake = root / "vastai"
@@ -277,6 +282,11 @@ class VastProviderTest(unittest.TestCase):
             (home / ".config" / "vastai" / "vast_api_key").write_text(
                 "test-only\n", encoding="utf-8"
             )
+            (home / ".ssh").mkdir()
+            (home / ".ssh" / "abliteration-station-vast.pub").write_text(
+                "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest test\n",
+                encoding="utf-8",
+            )
             arguments = root / "arguments"
             fake = root / "vastai"
             fake.write_text(
@@ -325,7 +335,7 @@ class VastProviderTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn(
-            "ghcr.io/andrewting19/abliteration-station-runtime:cuda13.2-v4",
+            "ghcr.io/andrewting19/abliteration-station-runtime:cuda13.2-v5",
             script,
         )
         deploy = (
@@ -333,7 +343,18 @@ class VastProviderTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("ControlMaster=auto", deploy)
         self.assertIn("ControlPersist=60", deploy)
+        self.assertIn("QWEN38_SEND_RUNTIME_CACHE:-0", deploy)
         self.assertIn("image=$RUNTIME_IMAGE", script)
+        self.assertIn('direct_image_env', script)
+        self.assertIn('-p 22:22 -e PUBLIC_KEY_B64=', script)
+        self.assertNotIn('--disk 150 --ssh --direct', script)
+        self.assertNotIn('--onstart "$SCRIPT_DIR/vast-onstart.sh"', script)
+
+        entrypoint = (
+            ROOT / "images" / "runtime" / "entrypoint.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn('PUBLIC_KEY_B64', entrypoint)
+        self.assertIn('base64 -d', entrypoint)
 
     def test_bootstrap_uses_prebuilt_runtime_and_draft_cache(self) -> None:
         bootstrap = (
@@ -356,6 +377,7 @@ class VastProviderTest(unittest.TestCase):
         self.assertIn("QWEN38_ALLOW_CUDA_13_0_FALLBACK", ensure)
         self.assertIn("The CUDA 13.0 fallback is disabled", ensure)
         self.assertIn("QWEN38_FRESH_RENTAL_ATTEMPTS", ensure)
+        self.assertIn("QWEN38_OFFER_ACQUIRE_ATTEMPTS", ensure)
         self.assertIn('sort -nu "$failed_offers_file" | paste -sd, -', ensure)
 
     def test_retained_start_grace_fails_over_after_provider_scheduling_window(self) -> None:

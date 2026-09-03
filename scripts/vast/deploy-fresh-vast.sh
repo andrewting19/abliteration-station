@@ -59,7 +59,8 @@ progress runtime_assets "Sending the verified runtime assets" 45
   "root@$SSH_HOST:$REMOTE_STAGE/"
 
 BUILD_CACHE_NAME=$QWEN38_BUILD_CACHE_FILE
-if [[ -s "$SCRIPT_DIR/cache/$BUILD_CACHE_NAME" && \
+if [[ "${QWEN38_SEND_RUNTIME_CACHE:-0}" == 1 && \
+      -s "$SCRIPT_DIR/cache/$BUILD_CACHE_NAME" && \
       -s "$SCRIPT_DIR/cache/$BUILD_CACHE_NAME.sha256" ]]; then
   "${SCP[@]}" \
     "$SCRIPT_DIR/cache/$BUILD_CACHE_NAME" \

@@ -9,7 +9,7 @@ INSTANCE_FILE=${ABLITERATION_STATION_INSTANCE_FILE:-/var/lib/abliteration-statio
 PROGRESS_COMMAND=${ABLITERATION_STATION_PROGRESS_COMMAND:-/usr/local/bin/abliteration-station-progress}
 QUERY_BASE='gpu_name=RTX_5090 num_gpus=1 verified=True rentable=True reliability>=0.98 direct_port_count>=1 cpu_ram>=32 disk_space>=150 cuda_vers>=13 dlperf>=190 duration>=30'
 CUDA_MIN=${QWEN38_CUDA_MIN:-13.2}
-RUNTIME_IMAGE=${QWEN38_RUNTIME_IMAGE:-ghcr.io/andrewting19/abliteration-station-runtime:cuda13.2-v4}
+RUNTIME_IMAGE=${QWEN38_RUNTIME_IMAGE:-ghcr.io/andrewting19/abliteration-station-runtime:cuda13.2-v5}
 MIN_INET_DOWN=${QWEN38_MIN_INET_DOWN:-0}
 QUERY_PERFORMANCE="$QUERY_BASE pcie_bw>=45"
 QUERY_BALANCED="$QUERY_BASE pcie_bw>=25"
@@ -17,6 +17,14 @@ QUERY_BALANCED="$QUERY_BASE pcie_bw>=25"
 die() {
   echo "$*" >&2
   exit 1
+}
+
+direct_image_env() {
+  local public_key_file="${SSH_KEY}.pub" public_key_b64
+  [[ -s "$public_key_file" ]] || die "SSH public key not found: $public_key_file"
+  public_key_b64=$(base64 <"$public_key_file" | tr -d '\r\n')
+  [[ "$public_key_b64" =~ ^[A-Za-z0-9+/=]+$ ]] || die "The SSH public key could not be encoded"
+  printf '%s' "-p 22:22 -e PUBLIC_KEY_B64=$public_key_b64"
 }
 
 progress() {
@@ -468,11 +476,12 @@ rent_offer() {
     die "Offer $offer_id does not support CUDA 13.0"
   fi
 
+  local container_env
+  container_env=$(direct_image_env)
   local args=(create instance "$offer_id"
     --image "$image"
-    --disk 150 --ssh --direct --cancel-unavail
-    --label qwen38-q3
-    --onstart "$SCRIPT_DIR/vast-onstart.sh")
+    --disk 150 --env "$container_env" --cancel-unavail
+    --label qwen38-q3)
   if [[ "$rental_type" == "bid" ]]; then
     args+=(--bid_price "$cap")
   fi
@@ -546,7 +555,8 @@ rent_performance() {
   [[ "$confirmation" == "--rent" ]] ||
     die "No rental was made. Add --rent after you review the hourly cap."
 
-  local attempt raw offer_id result rc
+  local attempt raw offer_id result rc container_env
+  container_env=$(direct_image_env)
   for attempt in $(seq 1 40); do
     raw=$("$VASTAI" search offers "$QUERY_PERFORMANCE" \
       --type on-demand --storage 150 --limit 100 -o 'dph+' --raw)
@@ -569,8 +579,8 @@ rent_performance() {
     set +e
     result=$("$VASTAI" create instance "$offer_id" \
       --image "$RUNTIME_IMAGE" \
-      --disk 150 --ssh --direct --cancel-unavail \
-      --label qwen38-q3 --onstart "$SCRIPT_DIR/vast-onstart.sh" --raw 2>&1)
+      --disk 150 --env "$container_env" --cancel-unavail \
+      --label qwen38-q3 --raw 2>&1)
     rc=$?
     set -e
     if [[ $rc -eq 0 ]] && jq -e '.success == true and .new_contract' >/dev/null 2>&1 <<<"$result"; then
@@ -589,7 +599,8 @@ rent_balanced() {
   [[ "$confirmation" == "--rent" ]] ||
     die "No rental was made. Add --rent after you review the hourly cap."
 
-  local attempt raw offer_id result rc
+  local attempt raw offer_id result rc container_env
+  container_env=$(direct_image_env)
   for attempt in $(seq 1 60); do
     raw=$("$VASTAI" search offers "$QUERY_BALANCED" \
       --type on-demand --storage 150 --limit 100 -o 'dph+' --raw)
@@ -612,8 +623,8 @@ rent_balanced() {
     set +e
     result=$("$VASTAI" create instance "$offer_id" \
       --image "$RUNTIME_IMAGE" \
-      --disk 150 --ssh --direct --cancel-unavail \
-      --label qwen38-q3 --onstart "$SCRIPT_DIR/vast-onstart.sh" --raw 2>&1)
+      --disk 150 --env "$container_env" --cancel-unavail \
+      --label qwen38-q3 --raw 2>&1)
     rc=$?
     set -e
     if [[ $rc -eq 0 ]] && jq -e '.success == true and .new_contract' >/dev/null 2>&1 <<<"$result"; then
