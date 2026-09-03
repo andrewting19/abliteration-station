@@ -9,12 +9,9 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 COPY --from=cuda-runtime /usr/local/cuda-13.2/targets/x86_64-linux/lib/libcublas.so.13.3.0.5 /usr/local/cuda-13.2/targets/x86_64-linux/lib/
 COPY --from=cuda-runtime /usr/local/cuda-13.2/targets/x86_64-linux/lib/libcublasLt.so.13.3.0.5 /usr/local/cuda-13.2/targets/x86_64-linux/lib/
-COPY --from=cuda-runtime /usr/local/cuda-13.2/targets/x86_64-linux/lib/libcudart.so.13.2.51 /usr/local/cuda-13.2/targets/x86_64-linux/lib/
-
 RUN cd /usr/local/cuda-13.2/targets/x86_64-linux/lib \
-    && ln -s libcublas.so.13.3.0.5 libcublas.so.13 \
-    && ln -s libcublasLt.so.13.3.0.5 libcublasLt.so.13 \
-    && ln -s libcudart.so.13.2.51 libcudart.so.13 \
+    && ln -sf libcublas.so.13.3.0.5 libcublas.so.13 \
+    && ln -sf libcublasLt.so.13.3.0.5 libcublasLt.so.13 \
     && ldconfig
 
 RUN apt-get update \
