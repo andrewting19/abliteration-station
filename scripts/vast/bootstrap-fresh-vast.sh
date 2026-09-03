@@ -344,7 +344,15 @@ fi
 
 supervisorctl reread
 supervisorctl update
+tailscale_start_pid=""
+if [[ -s "$QWEN38_ROOT/tailscale/tailscaled.state" ]]; then
+  supervisorctl start tailscaled-qwen >/tmp/qwen38-tailscale-start.log 2>&1 &
+  tailscale_start_pid=$!
+fi
 supervisorctl restart qwen38-cloud
+if [[ -n "$tailscale_start_pid" ]]; then
+  wait "$tailscale_start_pid"
+fi
 
 for _ in $(seq 1 120); do
   if curl -fsS --max-time 2 \

@@ -204,7 +204,11 @@ for rental_attempt in $(seq 1 "$FRESH_RENTAL_ATTEMPTS"); do
   if (( copied_workspace == 0 )); then
     echo "Deploying Qwen3.8 Q3 and DFlash on Vast instance $new_instance_id..." >&2
     "$PROGRESS_COMMAND" public_bootstrap "Downloading and verifying the model workspace" 1800 "$new_instance_id"
-    if ! "$QWEN_VAST" deploy "$new_instance_id" >&2; then
+    deploy_env=()
+    if [[ -z "$old_instance_id" ]]; then
+      deploy_env+=(QWEN38_ACTIVATE_TAILSCALE_STATE=1)
+    fi
+    if ! env "${deploy_env[@]}" "$QWEN_VAST" deploy "$new_instance_id" >&2; then
       rollback_new_instance "$new_instance_id"
       continue
     fi
@@ -216,7 +220,11 @@ for rental_attempt in $(seq 1 "$FRESH_RENTAL_ATTEMPTS"); do
     route_args=("$new_instance_id")
   fi
   "$PROGRESS_COMMAND" private_route "Restoring the private Tailscale route" 45 "$new_instance_id"
-  if ! "$QWEN_VAST" activate-route "${route_args[@]}" >&2; then
+  route_env=()
+  if [[ -z "$old_instance_id" && "$copied_workspace" == 0 ]]; then
+    route_env+=(QWEN38_PRIVATE_ROUTE_PRELOADED=1)
+  fi
+  if ! env "${route_env[@]}" "$QWEN_VAST" activate-route "${route_args[@]}" >&2; then
     rollback_new_instance "$new_instance_id"
     continue
   fi

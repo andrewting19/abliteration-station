@@ -384,6 +384,26 @@ activate_private_route() {
   local endpoint host port
   endpoint=$(wait_ssh "$instance_id")
   IFS=$'\t' read -r host port <<<"$endpoint"
+  if [[ "${QWEN38_PRIVATE_ROUTE_PRELOADED:-0}" == 1 ]]; then
+    ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+      -i "$SSH_KEY" -p "$port" "root@$host" '
+        set -euo pipefail
+        for _ in $(seq 1 60); do
+          if tailscale --socket=/var/run/tailscale/tailscaled.sock status --json 2>/dev/null |
+               jq -e ".Self.Online == true" >/dev/null; then
+            tailscale --socket=/var/run/tailscale/tailscaled.sock serve --bg --tcp 17070 tcp://127.0.0.1:17070 >/dev/null
+            tailscale --socket=/var/run/tailscale/tailscaled.sock status --json |
+              jq -r ".Self | [.DNSName,.TailscaleIPs[0],.Online] | @tsv"
+            exit 0
+          fi
+          sleep 1
+        done
+        exit 1
+      '
+    install -d -m 0755 "$(dirname "$INSTANCE_FILE")"
+    printf '%s\n' "$instance_id" | install -m 0644 /dev/stdin "$INSTANCE_FILE"
+    return
+  fi
   ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
     -i "$SSH_KEY" -p "$port" "root@$host" \
     'supervisorctl stop tailscaled-qwen; install -d -m 0700 /workspace/qwen38/tailscale'
