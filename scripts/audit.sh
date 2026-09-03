@@ -38,14 +38,17 @@ systemctl is-enabled --quiet abliteration-station-proxy.service
 systemctl is-active --quiet abliteration-station-proxy.service
 ss -ltn | grep -q ':17072 '
 [[ -x /usr/local/bin/pi-abliteration-station ]]
-[[ -s /root/.pi/agent/extensions/abliteration-station-status.ts ]]
-[[ -s /root/.pi/agent/models.json ]]
-model_id=$(jq -r '.model.id' "$config")
-context_size=$(jq -r '.model.context_size' "$config")
-jq -e --arg model_id "$model_id" --argjson context_size "$context_size" '
-  .providers["abliteration-station"].models |
-  any(.id == $model_id and .contextWindow == $context_size)
-' /root/.pi/agent/models.json >/dev/null
+pi_dir=${PI_CODING_AGENT_DIR:-/root/.pi/agent}
+package_manifest=$(find "$pi_dir/git" "$pi_dir/npm/node_modules" \
+  -path '*/abliteration-station/package.json' -type f -print -quit 2>/dev/null || true)
+[[ -n "$package_manifest" && -s "$package_manifest" ]]
+jq -e '
+  .name == "@andrewting19/abliteration-station" and
+  (.pi.extensions | index("./extensions") != null)
+' "$package_manifest" >/dev/null
+[[ -s "$(dirname -- "$package_manifest")/extensions/abliteration-station.ts" ]]
+[[ ! -e "$pi_dir/extensions/abliteration-station-status.ts" ]]
+[[ ! -e "$pi_dir/extensions/qwen-cloud-wake-status.ts" ]]
 
 doctor=$($cli --config "$config" doctor)
 jq -e 'length > 0 and ([.[] == []] | all)' >/dev/null <<<"$doctor"

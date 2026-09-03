@@ -45,6 +45,12 @@ class PiPackageTest(unittest.TestCase):
         configure = (ROOT / "scripts" / "configure.sh").read_text(encoding="utf-8")
         self.assertNotIn('"$install_root/install-pi-provider.py"', configure)
 
+    def test_audit_checks_the_package_instead_of_legacy_registration(self) -> None:
+        audit = (ROOT / "scripts" / "audit.sh").read_text(encoding="utf-8")
+        self.assertIn("@andrewting19/abliteration-station", audit)
+        self.assertIn("extensions/abliteration-station.ts", audit)
+        self.assertNotIn('/root/.pi/agent/models.json', audit)
+
 
 if __name__ == "__main__":
     unittest.main()
