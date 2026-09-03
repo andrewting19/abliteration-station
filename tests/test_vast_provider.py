@@ -320,6 +320,26 @@ class VastProviderTest(unittest.TestCase):
             value = arguments.read_text(encoding="utf-8").splitlines()
             self.assertIn("vastai/base-image:cuda-13.0.3-auto", value)
 
+    def test_cuda_13_2_offer_uses_prebuilt_runtime_image(self) -> None:
+        script = (ROOT / "scripts" / "vast" / "qwen-vast").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "ghcr.io/andrewting19/abliteration-station-runtime:cuda13.2-v1",
+            script,
+        )
+        self.assertIn("image=$RUNTIME_IMAGE", script)
+
+    def test_bootstrap_uses_prebuilt_runtime_and_draft_cache(self) -> None:
+        bootstrap = (
+            ROOT / "scripts" / "vast" / "bootstrap-fresh-vast.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn("QWEN38_PREBUILT_CACHE_DIR", bootstrap)
+        self.assertIn("$PREBUILT_CACHE_DIR/runtime.tar.zst", bootstrap)
+        self.assertIn(
+            '$PREBUILT_CACHE_DIR/$QWEN38_DRAFT_Q4_FILE', bootstrap
+        )
+
     def test_ensure_falls_back_from_cuda_13_2_to_cuda_13_0(self) -> None:
         ensure = (ROOT / "scripts" / "vast" / "ensure.sh").read_text(
             encoding="utf-8"

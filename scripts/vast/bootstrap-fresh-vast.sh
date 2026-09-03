@@ -10,12 +10,19 @@ case "$QWEN38_ROOT" in
 esac
 
 export DEBIAN_FRONTEND=noninteractive
-dpkg --force-confold --configure -a
-apt-get update
-apt-get -o Dpkg::Options::="--force-confold" install -y --no-install-recommends \
-  aria2 build-essential ca-certificates cmake curl git jq libcurl4-openssl-dev \
-  libssl-dev ninja-build openssl pkg-config python3 python3-pip \
-  supervisor zstd
+required_commands=(aria2c curl jq openssl python3 supervisord tailscaled zstd)
+missing_commands=()
+for required_command in "${required_commands[@]}"; do
+  command -v "$required_command" >/dev/null 2>&1 || missing_commands+=("$required_command")
+done
+if (( ${#missing_commands[@]} > 0 )); then
+  dpkg --force-confold --configure -a
+  apt-get update
+  apt-get -o Dpkg::Options::="--force-confold" install -y --no-install-recommends \
+    aria2 build-essential ca-certificates cmake curl git jq libcurl4-openssl-dev \
+    libssl-dev ninja-build openssl pkg-config python3 python3-pip \
+    supervisor zstd
+fi
 
 if ! command -v tailscaled >/dev/null 2>&1; then
   curl -fsSL --retry 5 https://tailscale.com/install.sh -o /tmp/install-tailscale.sh
@@ -32,6 +39,13 @@ BUILD_NATIVE=OFF
 BUILD_DIR="$LLAMA_DIR/$BUILD_NAME"
 BUILD_CACHE="$SCRIPT_DIR/$BUILD_CACHE_NAME"
 BUILD_CACHE_SHA="$BUILD_CACHE.sha256"
+
+PREBUILT_CACHE_DIR=${QWEN38_PREBUILT_CACHE_DIR:-/opt/abliteration-station/cache}
+if [[ ! -s "$BUILD_CACHE" && -s "$PREBUILT_CACHE_DIR/runtime.tar.zst" ]]; then
+  echo "$QWEN38_BUILD_CACHE_SHA256  $PREBUILT_CACHE_DIR/runtime.tar.zst" | sha256sum -c -
+  cp "$PREBUILT_CACHE_DIR/runtime.tar.zst" "$BUILD_CACHE"
+  printf '%s  %s\n' "$QWEN38_BUILD_CACHE_SHA256" "$BUILD_CACHE_NAME" >"$BUILD_CACHE_SHA"
+fi
 
 build_matches_source() {
   local binary=$1
@@ -230,6 +244,11 @@ download_hf_file() {
 TARGET_PATH="$QWEN38_ROOT/models/$QWEN38_TARGET_FILE"
 DRAFT_BF16_PATH="$QWEN38_ROOT/models/$QWEN38_DRAFT_BF16_FILE"
 DRAFT_Q4_PATH="$QWEN38_ROOT/models/$QWEN38_DRAFT_Q4_FILE"
+
+if [[ ! -s "$DRAFT_Q4_PATH" && -s "$PREBUILT_CACHE_DIR/$QWEN38_DRAFT_Q4_FILE" ]]; then
+  echo "$QWEN38_DRAFT_Q4_SHA256  $PREBUILT_CACHE_DIR/$QWEN38_DRAFT_Q4_FILE" | sha256sum -c -
+  cp --reflink=auto "$PREBUILT_CACHE_DIR/$QWEN38_DRAFT_Q4_FILE" "$DRAFT_Q4_PATH"
+fi
 
 draft_artifact_pid=""
 if [[ ! -f "$DRAFT_Q4_PATH" ]] ||
