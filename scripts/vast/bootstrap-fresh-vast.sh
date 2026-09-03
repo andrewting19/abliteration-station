@@ -35,12 +35,15 @@ BUILD_CACHE_SHA="$BUILD_CACHE.sha256"
 
 build_matches_source() {
   local binary=$1
+  local binary_dir
   [[ -x "$binary" ]] || return 1
   [[ -r "$BUILD_DIR/.qwen38-build-profile" ]] || return 1
   [[ $(<"$BUILD_DIR/.qwen38-build-profile") == "$BUILD_PROFILE" ]] || return 1
   [[ -r "$BUILD_DIR/.qwen38-source-tree" ]] || return 1
   [[ $(<"$BUILD_DIR/.qwen38-source-tree") == "$QWEN38_LLAMA_EXPECTED_TREE" ]] || return 1
-  "$binary" --version >/dev/null 2>&1
+  binary_dir=$(dirname -- "$binary")
+  LD_LIBRARY_PATH="$binary_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+    "$binary" --version >/dev/null 2>&1
 }
 
 if [[ -s "$BUILD_CACHE" ]] &&
@@ -121,6 +124,8 @@ else
     -DGGML_CUDA_FA=ON \
     -DGGML_CUDA_GRAPHS=ON \
     -DGGML_NATIVE="$BUILD_NATIVE" \
+    -DLLAMA_BUILD_UI=OFF \
+    -DLLAMA_USE_PREBUILT_UI=OFF \
     -DLLAMA_BUILD_SERVER=ON
   cmake --build "$BUILD_DIR" --target llama-server llama-quantize -j "$(nproc)"
   printf '%s\n' "$BUILD_PROFILE" > "$BUILD_DIR/.qwen38-build-profile"
@@ -211,8 +216,14 @@ download_hf_file() {
   local expected_sha=$4
   local destination=$5
   local expected_bytes=$6
+  local primary_url="https://huggingface.co/${repo}/resolve/${revision}/${file}?download=true"
+  local download_url=$primary_url
+  if ! curl -fsSIL --connect-timeout 5 --max-time 10 "$primary_url" >/dev/null 2>&1; then
+    download_url="https://hf-mirror.com/${repo}/resolve/${revision}/${file}"
+    echo "The Hugging Face route is unavailable. Using the checksum-verified mirror." >&2
+  fi
   download_url_file \
-    "https://huggingface.co/${repo}/resolve/${revision}/${file}?download=true" \
+    "$download_url" \
     "$expected_sha" "$destination" "$expected_bytes"
 }
 

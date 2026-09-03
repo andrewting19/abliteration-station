@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.1 - 2026-09-03
+
+- Fix portable runtime validation when the packaged shared libraries are not in
+  the system library path.
+- Use a checksum-verified Hugging Face mirror when the primary model-download
+  route is unavailable.
+- Disable the optional llama.cpp web UI download during source-build fallback.
+
 ## 0.4.0 - 2026-09-03
 
 - Add portable, checksum-verified KV-cache save, transfer, import, and restore

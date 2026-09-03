@@ -78,6 +78,13 @@ class VastProviderTest(unittest.TestCase):
         self.assertIn("supervisorctl pid", bootstrap)
         self.assertNotIn("if ! supervisorctl status", bootstrap)
         self.assertIn("${CUDA_VERSION:-} == 13.2*", bootstrap)
+        self.assertIn("-DLLAMA_USE_PREBUILT_UI=OFF", bootstrap)
+        self.assertIn("https://hf-mirror.com/", bootstrap)
+        self.assertIn("curl -fsSIL --connect-timeout 5 --max-time 10", bootstrap)
+        self.assertIn(
+            'LD_LIBRARY_PATH="$binary_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"',
+            bootstrap,
+        )
         self.assertLess(
             bootstrap.index("Using the verified cached RTX 5090 build"),
             bootstrap.index("git clone --filter=blob:none"),

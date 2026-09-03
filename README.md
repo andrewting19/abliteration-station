@@ -68,7 +68,7 @@ normally starts much faster.
 Install the package from GitHub:
 
 ```sh
-pi install git:github.com/andrewting19/abliteration-station@v0.4.0
+pi install git:github.com/andrewting19/abliteration-station@v0.4.1
 ```
 
 Start Pi and run `/abliteration-setup`. On a root-based Pi server, this
