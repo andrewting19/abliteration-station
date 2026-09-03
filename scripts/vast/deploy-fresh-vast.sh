@@ -79,10 +79,11 @@ INFERENCE_KEY_FILE=${ABLITERATION_STATION_INFERENCE_KEY_FILE:-$HOME/.config/abli
 
 # Route activation is separate by default so a blue-green replacement does
 # not start with the same Tailscale identity as the still-running source.
+PRIVATE_STATE_FILE="${ABLITERATION_STATION_PRIVATE_STATE_DIR:-/var/lib/abliteration-station/vast-private}/tailscaled.state"
 if [[ "${QWEN38_ACTIVATE_TAILSCALE_STATE:-0}" == "1" && \
-      -s "$SCRIPT_DIR/.secrets/tailscaled.state" ]]; then
+      -s "$PRIVATE_STATE_FILE" ]]; then
   "${SSH[@]}" 'install -d -m 0700 /workspace/qwen38/tailscale'
-  "${SCP[@]}" "$SCRIPT_DIR/.secrets/tailscaled.state" \
+  "${SCP[@]}" "$PRIVATE_STATE_FILE" \
     "root@$SSH_HOST:/workspace/qwen38/tailscale/tailscaled.state"
   "${SSH[@]}" 'chmod 0600 /workspace/qwen38/tailscale/tailscaled.state'
 fi

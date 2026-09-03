@@ -344,6 +344,8 @@ class VastProviderTest(unittest.TestCase):
         self.assertIn("ControlMaster=auto", deploy)
         self.assertIn("ControlPersist=60", deploy)
         self.assertIn("QWEN38_SEND_RUNTIME_CACHE:-0", deploy)
+        self.assertIn("ABLITERATION_STATION_PRIVATE_STATE_DIR", deploy)
+        self.assertNotIn('SCRIPT_DIR/.secrets/tailscaled.state', deploy)
         self.assertIn("image=$RUNTIME_IMAGE", script)
         self.assertIn('direct_image_env', script)
         self.assertIn('-p 22:22 -e PUBLIC_KEY_B64=', script)
