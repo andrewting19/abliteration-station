@@ -2,8 +2,6 @@ FROM nvidia/cuda:13.2.0-runtime-ubuntu24.04@sha256:3b8afffc99c6ca801e6bf31a42640
 
 ARG RUNTIME_URL=https://github.com/andrewting19/abliteration-station/releases/download/bootstrap-artifacts-v1/llama-build-cuda13-sm120a-dflash-fused-kvpatch.tar.zst
 ARG RUNTIME_SHA256=a306552e059c812dc9a0991b19be400e98b6f7c6174a8ad5921a91a837247955
-ARG DRAFT_URL=https://github.com/andrewting19/abliteration-station/releases/download/bootstrap-artifacts-v1/Qwen3.8-27B-DFlash2-Q4_0.gguf
-ARG DRAFT_SHA256=3db1e714ed60a0765f117353f4747f9c83d0f2b74da6c1049e0890af22ad6e3a
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -23,14 +21,8 @@ RUN aria2c --allow-overwrite=true --auto-file-renaming=false --file-allocation=n
     && printf '%s  %s\n' "$RUNTIME_SHA256" runtime.tar.zst \
       > /opt/abliteration-station/cache/runtime.tar.zst.sha256
 
-RUN aria2c --allow-overwrite=true --auto-file-renaming=false --file-allocation=none \
-      --max-connection-per-server=16 --min-split-size=16M --split=16 \
-      --dir /opt/abliteration-station/cache --out Qwen3.8-27B-DFlash2-Q4_0.gguf "$DRAFT_URL" \
-    && echo "$DRAFT_SHA256  /opt/abliteration-station/cache/Qwen3.8-27B-DFlash2-Q4_0.gguf" | sha256sum -c -
-
 COPY images/runtime/entrypoint.sh /usr/local/bin/abliteration-station-container-entrypoint
 RUN chmod 0755 /usr/local/bin/abliteration-station-container-entrypoint
 
 EXPOSE 22
 ENTRYPOINT ["/usr/local/bin/abliteration-station-container-entrypoint"]
-

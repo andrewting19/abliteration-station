@@ -325,7 +325,7 @@ class VastProviderTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn(
-            "ghcr.io/andrewting19/abliteration-station-runtime:cuda13.2-v1",
+            "ghcr.io/andrewting19/abliteration-station-runtime:cuda13.2-v2",
             script,
         )
         self.assertIn("image=$RUNTIME_IMAGE", script)
@@ -348,6 +348,9 @@ class VastProviderTest(unittest.TestCase):
         fallback = ensure.index("QWEN38_CUDA_MIN=13.0")
         self.assertLess(first, fallback)
         self.assertIn("No CUDA 13.2 GPU is available", ensure)
+        self.assertIn("QWEN38_ALLOW_CUDA_13_0_FALLBACK", ensure)
+        self.assertIn("The CUDA 13.0 fallback is disabled", ensure)
+        self.assertIn("QWEN38_FRESH_RENTAL_ATTEMPTS", ensure)
         self.assertIn('sort -nu "$failed_offers_file" | paste -sd, -', ensure)
 
     def test_retained_start_grace_fails_over_after_provider_scheduling_window(self) -> None:

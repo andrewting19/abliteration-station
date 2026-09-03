@@ -9,7 +9,8 @@ INSTANCE_FILE=${ABLITERATION_STATION_INSTANCE_FILE:-/var/lib/abliteration-statio
 PROGRESS_COMMAND=${ABLITERATION_STATION_PROGRESS_COMMAND:-/usr/local/bin/abliteration-station-progress}
 QUERY_BASE='gpu_name=RTX_5090 num_gpus=1 verified=True rentable=True reliability>=0.98 direct_port_count>=1 cpu_ram>=32 disk_space>=150 cuda_vers>=13 dlperf>=190 duration>=30'
 CUDA_MIN=${QWEN38_CUDA_MIN:-13.2}
-RUNTIME_IMAGE=${QWEN38_RUNTIME_IMAGE:-ghcr.io/andrewting19/abliteration-station-runtime:cuda13.2-v1}
+RUNTIME_IMAGE=${QWEN38_RUNTIME_IMAGE:-ghcr.io/andrewting19/abliteration-station-runtime:cuda13.2-v2}
+MIN_INET_DOWN=${QWEN38_MIN_INET_DOWN:-0}
 QUERY_PERFORMANCE="$QUERY_BASE pcie_bw>=45"
 QUERY_BALANCED="$QUERY_BASE pcie_bw>=25"
 
@@ -443,7 +444,12 @@ rent_offer() {
   raw=$("$VASTAI" search offers "$QUERY_BASE" \
     --type "$rental_type" --storage 150 --limit 100 -o 'dph+' --raw)
   raw=$(jq --argjson offer_id "$offer_id" --argjson cuda_min "$CUDA_MIN" \
-    'map(select(.id == $offer_id and (.cuda_max_good // 0) >= $cuda_min))' <<<"$raw")
+    --argjson min_inet_down "$MIN_INET_DOWN" \
+    'map(select(
+      .id == $offer_id and
+      (.cuda_max_good // 0) >= $cuda_min and
+      (.inet_down // 0) >= $min_inet_down
+    ))' <<<"$raw")
   [[ $(jq 'length' <<<"$raw") -eq 1 ]] || die "Offer $offer_id is no longer available"
   if [[ "$rental_type" == "bid" ]]; then
     price=$(jq -r '.[0].min_bid' <<<"$raw")
@@ -493,15 +499,16 @@ rent_best() {
   [[ "$rent_attempts" =~ ^[1-9][0-9]*$ ]] || die "QWEN38_RENT_BEST_ATTEMPTS must be a positive integer"
   local excluded_offer_ids=${QWEN38_EXCLUDE_OFFER_IDS:-}
   if [[ "$rental_type" == "bid" ]]; then
-    selector='map(select(.min_bid <= $cap) | select(.id as $id | (($excluded | split(",")) | index($id | tostring) | not))) | sort_by(.min_bid, -.pcie_bw, -.reliability) | .[0].id // empty'
+    selector='map(select(.min_bid <= $cap) | select((.inet_down // 0) >= $min_inet_down) | select(.id as $id | (($excluded | split(",")) | index($id | tostring) | not))) | sort_by(-(.inet_down // 0), .min_bid, -.pcie_bw, -.reliability) | .[0].id // empty'
   else
-    selector='map(select(.dph_total <= $cap) | select(.id as $id | (($excluded | split(",")) | index($id | tostring) | not))) | sort_by(.dph_total, -.pcie_bw, -.reliability) | .[0].id // empty'
+    selector='map(select(.dph_total <= $cap) | select((.inet_down // 0) >= $min_inet_down) | select(.id as $id | (($excluded | split(",")) | index($id | tostring) | not))) | sort_by(-(.inet_down // 0), .dph_total, -.pcie_bw, -.reliability) | .[0].id // empty'
   fi
 
   for attempt in $(seq 1 "$rent_attempts"); do
     raw=$("$VASTAI" search offers "$QUERY_BASE" \
       --type "$rental_type" --storage 150 --limit 50 -o 'dph+' --raw)
     offer_id=$(jq -r --argjson cap "$cap" --argjson cuda_min "$CUDA_MIN" \
+      --argjson min_inet_down "$MIN_INET_DOWN" \
       --arg excluded "$excluded_offer_ids" \
       "map(select((.cuda_max_good // 0) >= \$cuda_min)) | $selector" <<<"$raw")
     if [[ -z "$offer_id" ]]; then

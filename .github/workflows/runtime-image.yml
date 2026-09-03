@@ -32,8 +32,7 @@ jobs:
           provenance: false
           sbom: false
           tags: |
-            ghcr.io/andrewting19/abliteration-station-runtime:cuda13.2-v1
+            ghcr.io/andrewting19/abliteration-station-runtime:cuda13.2-v2
             ghcr.io/andrewting19/abliteration-station-runtime:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-

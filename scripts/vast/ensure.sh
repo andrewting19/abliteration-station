@@ -14,6 +14,8 @@ API_KEY_COMMAND=${QWEN38_API_KEY_COMMAND:-$QWEN_VAST_DIR/inference-key}
 PROGRESS_COMMAND=${ABLITERATION_STATION_PROGRESS_COMMAND:-/usr/local/bin/abliteration-station-progress}
 DEFERRED_GATE_COMMAND=${ABLITERATION_STATION_DEFERRED_GATE_COMMAND:-/usr/local/bin/abliteration-station-deferred-gate}
 USE_PROVIDER_COPY=${QWEN38_USE_PROVIDER_COPY:-0}
+ALLOW_CUDA_13_0_FALLBACK=${QWEN38_ALLOW_CUDA_13_0_FALLBACK:-1}
+FRESH_RENTAL_ATTEMPTS=${QWEN38_FRESH_RENTAL_ATTEMPTS:-3}
 
 die() {
   echo "Abliteration Station start failed: $*" >&2
@@ -144,23 +146,31 @@ rollback_new_instance() {
   fi
 }
 
+[[ "$FRESH_RENTAL_ATTEMPTS" =~ ^[1-3]$ ]] ||
+  die "QWEN38_FRESH_RENTAL_ATTEMPTS must be 1, 2, or 3"
+
 excluded_offer_ids=""
-for rental_attempt in 1 2 3; do
-  "$PROGRESS_COMMAND" replacement_select "Selecting replacement RTX 5090, attempt $rental_attempt of 3" 30
-  echo "Rental attempt $rental_attempt of 3: selecting one verified RTX 5090 below \$$PRICE_CAP per hour..." >&2
+for rental_attempt in $(seq 1 "$FRESH_RENTAL_ATTEMPTS"); do
+  "$PROGRESS_COMMAND" replacement_select "Selecting replacement RTX 5090, attempt $rental_attempt of $FRESH_RENTAL_ATTEMPTS" 30
+  echo "Rental attempt $rental_attempt of $FRESH_RENTAL_ATTEMPTS: selecting one verified RTX 5090 below \$$PRICE_CAP per hour..." >&2
   if ! created=$(QWEN38_EXCLUDE_OFFER_IDS="$excluded_offer_ids" \
       QWEN38_FAILED_OFFERS_FILE="$failed_offers_file" \
       QWEN38_CUDA_MIN=13.2 QWEN38_RENT_BEST_ATTEMPTS=5 \
       "$QWEN_VAST" rent-best on-demand "$PRICE_CAP" --rent); then
     excluded_offer_ids=$(sort -nu "$failed_offers_file" | paste -sd, -)
-    echo "No CUDA 13.2 offer was secured. Trying a matching CUDA 13.0 host." >&2
-    "$PROGRESS_COMMAND" replacement_select "No CUDA 13.2 GPU is available; trying CUDA 13.0" 25
-    if ! created=$(QWEN38_EXCLUDE_OFFER_IDS="$excluded_offer_ids" \
-        QWEN38_FAILED_OFFERS_FILE="$failed_offers_file" \
-        QWEN38_CUDA_MIN=13.0 QWEN38_RENT_BEST_ATTEMPTS=10 \
-        "$QWEN_VAST" rent-best on-demand "$PRICE_CAP" --rent); then
-      excluded_offer_ids=$(sort -nu "$failed_offers_file" | paste -sd, -)
-      echo "No usable offer was secured on attempt $rental_attempt." >&2
+    if [[ "$ALLOW_CUDA_13_0_FALLBACK" == 1 ]]; then
+      echo "No CUDA 13.2 offer was secured. Trying a matching CUDA 13.0 host." >&2
+      "$PROGRESS_COMMAND" replacement_select "No CUDA 13.2 GPU is available; trying CUDA 13.0" 25
+      if ! created=$(QWEN38_EXCLUDE_OFFER_IDS="$excluded_offer_ids" \
+          QWEN38_FAILED_OFFERS_FILE="$failed_offers_file" \
+          QWEN38_CUDA_MIN=13.0 QWEN38_RENT_BEST_ATTEMPTS=10 \
+          "$QWEN_VAST" rent-best on-demand "$PRICE_CAP" --rent); then
+        excluded_offer_ids=$(sort -nu "$failed_offers_file" | paste -sd, -)
+        echo "No usable offer was secured on attempt $rental_attempt." >&2
+        continue
+      fi
+    else
+      echo "No fast CUDA 13.2 offer was secured. The CUDA 13.0 fallback is disabled." >&2
       continue
     fi
   fi
@@ -228,4 +238,4 @@ for rental_attempt in 1 2 3; do
   rollback_new_instance "$new_instance_id"
 done
 
-die "three fresh RTX 5090 rentals failed the private Q3/262K chat gate"
+die "$FRESH_RENTAL_ATTEMPTS fresh RTX 5090 rental attempts failed the private Q3/262K chat gate"
