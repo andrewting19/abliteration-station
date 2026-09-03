@@ -9,7 +9,7 @@ INSTANCE_FILE=${ABLITERATION_STATION_INSTANCE_FILE:-/var/lib/abliteration-statio
 PROGRESS_COMMAND=${ABLITERATION_STATION_PROGRESS_COMMAND:-/usr/local/bin/abliteration-station-progress}
 QUERY_BASE='gpu_name=RTX_5090 num_gpus=1 verified=True rentable=True reliability>=0.98 direct_port_count>=1 cpu_ram>=32 disk_space>=150 cuda_vers>=13 dlperf>=190 duration>=30'
 CUDA_MIN=${QWEN38_CUDA_MIN:-13.2}
-RUNTIME_IMAGE=${QWEN38_RUNTIME_IMAGE:-ghcr.io/andrewting19/abliteration-station-runtime:cuda13.2-v5}
+RUNTIME_IMAGE=${QWEN38_RUNTIME_IMAGE:-ghcr.io/andrewting19/abliteration-station-runtime:cuda13.2-v6}
 MIN_INET_DOWN=${QWEN38_MIN_INET_DOWN:-0}
 QUERY_PERFORMANCE="$QUERY_BASE pcie_bw>=45"
 QUERY_BALANCED="$QUERY_BASE pcie_bw>=25"

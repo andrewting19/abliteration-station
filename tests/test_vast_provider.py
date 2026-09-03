@@ -335,7 +335,7 @@ class VastProviderTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn(
-            "ghcr.io/andrewting19/abliteration-station-runtime:cuda13.2-v5",
+            "ghcr.io/andrewting19/abliteration-station-runtime:cuda13.2-v6",
             script,
         )
         deploy = (
@@ -369,6 +369,8 @@ class VastProviderTest(unittest.TestCase):
         self.assertIn(
             '$PREBUILT_CACHE_DIR/$QWEN38_DRAFT_Q4_FILE', bootstrap
         )
+        self.assertIn('Using the checksum-verified embedded Qwen target shards.', bootstrap)
+        self.assertIn('QWEN38_TARGET_SHARD_1_SHA256', bootstrap)
 
     def test_ensure_falls_back_from_cuda_13_2_to_cuda_13_0(self) -> None:
         ensure = (ROOT / "scripts" / "vast" / "ensure.sh").read_text(

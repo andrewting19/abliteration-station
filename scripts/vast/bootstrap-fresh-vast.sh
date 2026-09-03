@@ -247,6 +247,34 @@ download_hf_file() {
 TARGET_PATH="$QWEN38_ROOT/models/$QWEN38_TARGET_FILE"
 DRAFT_BF16_PATH="$QWEN38_ROOT/models/$QWEN38_DRAFT_BF16_FILE"
 DRAFT_Q4_PATH="$QWEN38_ROOT/models/$QWEN38_DRAFT_Q4_FILE"
+SELECTED_MODEL_FILE=$QWEN38_TARGET_FILE
+
+embedded_model_dir="$PREBUILT_CACHE_DIR/models"
+embedded_model_files=(
+  "$QWEN38_TARGET_SHARD_1"
+  "$QWEN38_TARGET_SHARD_2"
+  "$QWEN38_TARGET_SHARD_3"
+  "$QWEN38_TARGET_SHARD_4"
+)
+embedded_model_hashes=(
+  "$QWEN38_TARGET_SHARD_1_SHA256"
+  "$QWEN38_TARGET_SHARD_2_SHA256"
+  "$QWEN38_TARGET_SHARD_3_SHA256"
+  "$QWEN38_TARGET_SHARD_4_SHA256"
+)
+embedded_model_ready=1
+for index in "${!embedded_model_files[@]}"; do
+  source_path="$embedded_model_dir/${embedded_model_files[$index]}"
+  [[ -s "$source_path" ]] || { embedded_model_ready=0; break; }
+  echo "${embedded_model_hashes[$index]}  $source_path" | sha256sum -c -
+done
+if [[ "$embedded_model_ready" == 1 ]]; then
+  for filename in "${embedded_model_files[@]}"; do
+    cp --reflink=auto "$embedded_model_dir/$filename" "$QWEN38_ROOT/models/$filename"
+  done
+  SELECTED_MODEL_FILE=$QWEN38_TARGET_SHARD_1
+  echo "Using the checksum-verified embedded Qwen target shards."
+fi
 
 if [[ ! -s "$DRAFT_Q4_PATH" && -s "$PREBUILT_CACHE_DIR/$QWEN38_DRAFT_Q4_FILE" ]]; then
   echo "$QWEN38_DRAFT_Q4_SHA256  $PREBUILT_CACHE_DIR/$QWEN38_DRAFT_Q4_FILE" | sha256sum -c -
@@ -262,8 +290,10 @@ if [[ ! -f "$DRAFT_Q4_PATH" ]] ||
   draft_artifact_pid=$!
 fi
 
-download_hf_file \
-  "$QWEN38_TARGET_REPO" "$QWEN38_TARGET_REVISION" "$QWEN38_TARGET_FILE" "$QWEN38_TARGET_SHA256" "$TARGET_PATH" "$QWEN38_TARGET_BYTES"
+if [[ "$embedded_model_ready" != 1 ]]; then
+  download_hf_file \
+    "$QWEN38_TARGET_REPO" "$QWEN38_TARGET_REVISION" "$QWEN38_TARGET_FILE" "$QWEN38_TARGET_SHA256" "$TARGET_PATH" "$QWEN38_TARGET_BYTES"
+fi
 
 if [[ -n "$draft_artifact_pid" ]]; then
   if ! wait "$draft_artifact_pid"; then
@@ -300,6 +330,7 @@ install -m 0644 "$SCRIPT_DIR/qwen38-cloud.conf" /etc/supervisor/conf.d/qwen38-cl
 install -m 0644 "$SCRIPT_DIR/tailscaled-qwen.conf" /etc/supervisor/conf.d/tailscaled-qwen.conf
 install -m 0600 "$SCRIPT_DIR/runtime.env" "$QWEN38_ROOT/runtime.env"
 sed -i "s/^QWEN38_BUILD_DIR=.*/QWEN38_BUILD_DIR=$BUILD_NAME/" "$QWEN38_ROOT/runtime.env"
+sed -i "s/^QWEN38_MODEL_FILE=.*/QWEN38_MODEL_FILE=$SELECTED_MODEL_FILE/" "$QWEN38_ROOT/runtime.env"
 
 if [[ ! -s "$QWEN38_ROOT/api_key" ]]; then
   umask 077
