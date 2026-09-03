@@ -266,7 +266,9 @@ embedded_model_ready=1
 for index in "${!embedded_model_files[@]}"; do
   source_path="$embedded_model_dir/${embedded_model_files[$index]}"
   [[ -s "$source_path" ]] || { embedded_model_ready=0; break; }
-  echo "${embedded_model_hashes[$index]}  $source_path" | sha256sum -c -
+  if [[ "${QWEN38_TRUST_PINNED_IMAGE:-0}" != 1 ]]; then
+    echo "${embedded_model_hashes[$index]}  $source_path" | sha256sum -c -
+  fi
 done
 if [[ "$embedded_model_ready" == 1 ]]; then
   for filename in "${embedded_model_files[@]}"; do
@@ -277,7 +279,9 @@ if [[ "$embedded_model_ready" == 1 ]]; then
 fi
 
 if [[ ! -s "$DRAFT_Q4_PATH" && -s "$PREBUILT_CACHE_DIR/$QWEN38_DRAFT_Q4_FILE" ]]; then
-  echo "$QWEN38_DRAFT_Q4_SHA256  $PREBUILT_CACHE_DIR/$QWEN38_DRAFT_Q4_FILE" | sha256sum -c -
+  if [[ "${QWEN38_TRUST_PINNED_IMAGE:-0}" != 1 ]]; then
+    echo "$QWEN38_DRAFT_Q4_SHA256  $PREBUILT_CACHE_DIR/$QWEN38_DRAFT_Q4_FILE" | sha256sum -c -
+  fi
   cp --reflink=auto "$PREBUILT_CACHE_DIR/$QWEN38_DRAFT_Q4_FILE" "$DRAFT_Q4_PATH"
 fi
 

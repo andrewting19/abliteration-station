@@ -9,7 +9,7 @@ INSTANCE_FILE=${ABLITERATION_STATION_INSTANCE_FILE:-/var/lib/abliteration-statio
 PROGRESS_COMMAND=${ABLITERATION_STATION_PROGRESS_COMMAND:-/usr/local/bin/abliteration-station-progress}
 QUERY_BASE='gpu_name=RTX_5090 num_gpus=1 verified=True rentable=True reliability>=0.98 direct_port_count>=1 cpu_ram>=32 disk_space>=150 cuda_vers>=13 dlperf>=190 duration>=30'
 CUDA_MIN=${QWEN38_CUDA_MIN:-13.2}
-RUNTIME_IMAGE=${QWEN38_RUNTIME_IMAGE:-ghcr.io/andrewting19/abliteration-station-runtime:cuda13.2-v6}
+RUNTIME_IMAGE=${QWEN38_RUNTIME_IMAGE:-ghcr.io/andrewting19/abliteration-station-runtime@sha256:1d0692fca38c29173bb24c62ce61faca667cf3d9126ed1936724bf3f1e16490a}
 MIN_INET_DOWN=${QWEN38_MIN_INET_DOWN:-0}
 QUERY_PERFORMANCE="$QUERY_BASE pcie_bw>=45"
 QUERY_BALANCED="$QUERY_BASE pcie_bw>=25"
@@ -95,7 +95,7 @@ ssh_url() {
 
 wait_ssh() {
   local instance_id=$1
-  local poll_seconds=${QWEN38_SSH_POLL_SECONDS:-10}
+  local poll_seconds=${QWEN38_SSH_POLL_SECONDS:-1}
   local stopped_start_grace_seconds=${QWEN38_STOPPED_START_GRACE_SECONDS:-45}
   local fresh_host_grace_seconds=${QWEN38_FRESH_HOST_GRACE_SECONDS:-300}
   local retained_start=${QWEN38_RETAINED_START:-0}
@@ -173,7 +173,12 @@ deploy_instance() {
   local endpoint host port
   endpoint=$(wait_ssh "$instance_id")
   IFS=$'\t' read -r host port <<<"$endpoint"
-  "$SCRIPT_DIR/deploy-fresh-vast.sh" "$host" "$port" "$SSH_KEY" "$instance_id"
+  if [[ "$RUNTIME_IMAGE" == *@sha256:* ]]; then
+    QWEN38_TRUST_PINNED_IMAGE=1 \
+      "$SCRIPT_DIR/deploy-fresh-vast.sh" "$host" "$port" "$SSH_KEY" "$instance_id"
+  else
+    "$SCRIPT_DIR/deploy-fresh-vast.sh" "$host" "$port" "$SSH_KEY" "$instance_id"
+  fi
 }
 
 copy_workspace() {

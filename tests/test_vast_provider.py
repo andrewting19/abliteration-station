@@ -335,7 +335,7 @@ class VastProviderTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn(
-            "ghcr.io/andrewting19/abliteration-station-runtime:cuda13.2-v6",
+            "ghcr.io/andrewting19/abliteration-station-runtime@sha256:1d0692fca38c29173bb24c62ce61faca667cf3d9126ed1936724bf3f1e16490a",
             script,
         )
         deploy = (
@@ -358,8 +358,10 @@ class VastProviderTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn('PUBLIC_KEY_B64', entrypoint)
         self.assertIn('base64 -d', entrypoint)
-        self.assertIn('QWEN38_BATCH_SIZE=4096', (ROOT / "scripts" / "vast" / "runtime.env").read_text(encoding="utf-8"))
-        self.assertIn('QWEN38_UBATCH_SIZE=1024', (ROOT / "scripts" / "vast" / "runtime.env").read_text(encoding="utf-8"))
+        self.assertIn('QWEN38_BATCH_SIZE=8192', (ROOT / "scripts" / "vast" / "runtime.env").read_text(encoding="utf-8"))
+        self.assertIn('QWEN38_UBATCH_SIZE=2048', (ROOT / "scripts" / "vast" / "runtime.env").read_text(encoding="utf-8"))
+        self.assertIn('QWEN38_SSH_POLL_SECONDS:-1', script)
+        self.assertIn('QWEN38_TRUST_PINNED_IMAGE=1', script)
         self.assertIn('autostart=false', (ROOT / "scripts" / "vast" / "tailscaled-qwen.conf").read_text(encoding="utf-8"))
 
     def test_bootstrap_uses_prebuilt_runtime_and_draft_cache(self) -> None:

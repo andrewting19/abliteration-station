@@ -89,7 +89,7 @@ if [[ "${QWEN38_ACTIVATE_TAILSCALE_STATE:-0}" == "1" && \
 fi
 
 progress runtime_prepare "Preparing the CUDA runtime and inference server" 120
-"${SSH[@]}" "bash '$REMOTE_STAGE/bootstrap-fresh-vast.sh'" 2>&1 | while IFS= read -r line; do
+"${SSH[@]}" "QWEN38_TRUST_PINNED_IMAGE='${QWEN38_TRUST_PINNED_IMAGE:-0}' bash '$REMOTE_STAGE/bootstrap-fresh-vast.sh'" 2>&1 | while IFS= read -r line; do
   printf '%s\n' "$line"
   case "$line" in
     *"Cloning into"*|*"Using the verified cached RTX 5090 build"*)
