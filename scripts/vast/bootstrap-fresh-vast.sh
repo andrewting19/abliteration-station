@@ -24,8 +24,8 @@ fi
 
 mkdir -p "$QWEN38_ROOT/models" "$QWEN38_ROOT/slot-cache" "$QWEN38_ROOT/tailscale"
 
-LLAMA_DIR="$QWEN38_ROOT/llama.cpp-master-dflash"
-BUILD_NAME=build-cuda13-master
+LLAMA_DIR="$QWEN38_ROOT/llama.cpp-kvpatch"
+BUILD_NAME=build
 BUILD_CACHE_NAME=$QWEN38_BUILD_CACHE_FILE
 BUILD_PROFILE=portable-sm120a
 BUILD_NATIVE=OFF
@@ -42,6 +42,12 @@ build_matches_source() {
   [[ $(<"$BUILD_DIR/.qwen38-source-tree") == "$QWEN38_LLAMA_EXPECTED_TREE" ]] || return 1
   "$binary" --version >/dev/null 2>&1
 }
+
+if [[ -s "$BUILD_CACHE" ]] &&
+   ! echo "$QWEN38_BUILD_CACHE_SHA256  $BUILD_CACHE" | sha256sum -c - >/dev/null 2>&1; then
+  echo "Removing a runtime artifact that does not match the current manifest." >&2
+  rm -f -- "$BUILD_CACHE" "$BUILD_CACHE_SHA"
+fi
 
 if [[ ${CUDA_VERSION:-} == 13.2* && ! -s "$BUILD_CACHE" ]]; then
   if aria2c \
@@ -63,10 +69,17 @@ if [[ ${CUDA_VERSION:-} == 13.2* && ! -s "$BUILD_CACHE" ]]; then
   fi
 fi
 
+if [[ -s "$BUILD_CACHE" ]]; then
+  echo "$QWEN38_BUILD_CACHE_SHA256  $BUILD_CACHE" | sha256sum -c -
+  printf '%s  %s\n' "$QWEN38_BUILD_CACHE_SHA256" "$BUILD_CACHE_NAME" >"$BUILD_CACHE_SHA"
+fi
+
 if [[ -s "$BUILD_CACHE" && -s "$BUILD_CACHE_SHA" && ! -x "$BUILD_DIR/bin/llama-server" ]]; then
   mkdir -p "$LLAMA_DIR"
   (cd "$SCRIPT_DIR" && sha256sum -c "$(basename -- "$BUILD_CACHE_SHA")")
   tar --zstd -xf "$BUILD_CACHE" -C "$LLAMA_DIR"
+  printf '%s\n' "$BUILD_PROFILE" > "$BUILD_DIR/.qwen38-build-profile"
+  printf '%s\n' "$QWEN38_LLAMA_EXPECTED_TREE" > "$BUILD_DIR/.qwen38-source-tree"
 fi
 
 if [[ -x "$BUILD_DIR/bin/llama-server" ]] && ! build_matches_source "$BUILD_DIR/bin/llama-server"; then
@@ -86,12 +99,17 @@ else
   git clone --filter=blob:none --no-checkout \
     https://github.com/ggml-org/llama.cpp.git "$LLAMA_DIR"
   git -C "$LLAMA_DIR" checkout --detach "$QWEN38_LLAMA_BASE_COMMIT"
-  git -C "$LLAMA_DIR" fetch origin "$QWEN38_DFLASH_COMMIT"
-  git -C "$LLAMA_DIR" \
-    -c user.name=qwen38-bootstrap \
-    -c user.email=qwen38-bootstrap@localhost \
-    cherry-pick FETCH_HEAD
-  CURRENT_TREE=$(git -C "$LLAMA_DIR" rev-parse 'HEAD^{tree}')
+  if [[ -n "$QWEN38_DFLASH_COMMIT" && "$QWEN38_DFLASH_COMMIT" != "$QWEN38_LLAMA_BASE_COMMIT" ]]; then
+    git -C "$LLAMA_DIR" fetch origin "$QWEN38_DFLASH_COMMIT"
+    git -C "$LLAMA_DIR" \
+      -c user.name=qwen38-bootstrap \
+      -c user.email=qwen38-bootstrap@localhost \
+      cherry-pick FETCH_HEAD
+  fi
+  echo "$QWEN38_RUNTIME_PATCH_SHA256  $SCRIPT_DIR/$QWEN38_RUNTIME_PATCH_FILE" | sha256sum -c -
+  git -C "$LLAMA_DIR" apply "$SCRIPT_DIR/$QWEN38_RUNTIME_PATCH_FILE"
+  git -C "$LLAMA_DIR" add tools/server/server-context.cpp
+  CURRENT_TREE=$(git -C "$LLAMA_DIR" write-tree)
   if [[ "$CURRENT_TREE" != "$QWEN38_LLAMA_EXPECTED_TREE" ]]; then
     echo "Unexpected llama.cpp tree after build preparation: $CURRENT_TREE" >&2
     exit 1
@@ -118,27 +136,72 @@ download_url_file() {
   local url=$1
   local expected_sha=$2
   local destination=$3
+  local expected_bytes=$4
   local partial="${destination}.part"
+  local attempt pid size last_size=-1 stalled=0 complete_stable=0
 
   if [[ -f "$destination" ]] && echo "$expected_sha  $destination" | sha256sum -c - >/dev/null 2>&1; then
     return 0
   fi
 
-  aria2c \
-    --allow-overwrite=true \
-    --auto-file-renaming=false \
-    --console-log-level=warn \
-    --continue=true \
-    --file-allocation=none \
-    --max-connection-per-server=16 \
-    --min-split-size=16M \
-    --split=16 \
-    --summary-interval=10 \
-    --dir "$(dirname -- "$partial")" \
-    --out "$(basename -- "$partial")" \
-    "$url"
-  echo "$expected_sha  $partial" | sha256sum -c -
-  mv "$partial" "$destination"
+  for attempt in 1 2 3 4 5; do
+    aria2c \
+      --allow-overwrite=true \
+      --auto-file-renaming=false \
+      --console-log-level=warn \
+      --continue=true \
+      --file-allocation=none \
+      --max-connection-per-server=16 \
+      --min-split-size=16M \
+      --split=16 \
+      --summary-interval=10 \
+      --dir "$(dirname -- "$partial")" \
+      --out "$(basename -- "$partial")" \
+      "$url" &
+    pid=$!
+    last_size=-1
+    stalled=0
+    complete_stable=0
+    while kill -0 "$pid" 2>/dev/null; do
+      sleep 5
+      size=$(stat -c %s "$partial" 2>/dev/null || echo 0)
+      if [[ "$size" == "$last_size" ]]; then
+        stalled=$((stalled + 5))
+      else
+        stalled=0
+        last_size=$size
+      fi
+      if [[ "$size" == "$expected_bytes" ]]; then
+        complete_stable=$((complete_stable + 5))
+        if (( complete_stable >= 10 )) &&
+           echo "$expected_sha  $partial" | sha256sum -c - >/dev/null 2>&1; then
+          kill "$pid" 2>/dev/null || true
+          wait "$pid" 2>/dev/null || true
+          rm -f "${partial}.aria2"
+          mv "$partial" "$destination"
+          return 0
+        fi
+      else
+        complete_stable=0
+      fi
+      if (( stalled >= 120 )); then
+        echo "The download stopped making progress; retrying ($attempt/5)." >&2
+        kill "$pid" 2>/dev/null || true
+        wait "$pid" 2>/dev/null || true
+        break
+      fi
+    done
+    wait "$pid" 2>/dev/null || true
+    if [[ -f "$partial" ]] &&
+       [[ $(stat -c %s "$partial") == "$expected_bytes" ]] &&
+       echo "$expected_sha  $partial" | sha256sum -c - >/dev/null 2>&1; then
+      rm -f "${partial}.aria2"
+      mv "$partial" "$destination"
+      return 0
+    fi
+  done
+  echo "The verified download did not complete after five attempts." >&2
+  return 1
 }
 
 download_hf_file() {
@@ -147,9 +210,10 @@ download_hf_file() {
   local file=$3
   local expected_sha=$4
   local destination=$5
+  local expected_bytes=$6
   download_url_file \
     "https://huggingface.co/${repo}/resolve/${revision}/${file}?download=true" \
-    "$expected_sha" "$destination"
+    "$expected_sha" "$destination" "$expected_bytes"
 }
 
 TARGET_PATH="$QWEN38_ROOT/models/$QWEN38_TARGET_FILE"
@@ -161,12 +225,12 @@ if [[ ! -f "$DRAFT_Q4_PATH" ]] ||
    ! echo "$QWEN38_DRAFT_Q4_SHA256  $DRAFT_Q4_PATH" | sha256sum -c - >/dev/null 2>&1; then
   download_url_file \
     "$QWEN38_ARTIFACT_BASE_URL/$QWEN38_DRAFT_Q4_FILE" \
-    "$QWEN38_DRAFT_Q4_SHA256" "$DRAFT_Q4_PATH" &
+    "$QWEN38_DRAFT_Q4_SHA256" "$DRAFT_Q4_PATH" "$QWEN38_DRAFT_Q4_BYTES" &
   draft_artifact_pid=$!
 fi
 
 download_hf_file \
-  "$QWEN38_TARGET_REPO" "$QWEN38_TARGET_REVISION" "$QWEN38_TARGET_FILE" "$QWEN38_TARGET_SHA256" "$TARGET_PATH"
+  "$QWEN38_TARGET_REPO" "$QWEN38_TARGET_REVISION" "$QWEN38_TARGET_FILE" "$QWEN38_TARGET_SHA256" "$TARGET_PATH" "$QWEN38_TARGET_BYTES"
 
 if [[ -n "$draft_artifact_pid" ]]; then
   if ! wait "$draft_artifact_pid"; then
@@ -180,13 +244,14 @@ if [[ -f "$DRAFT_Q4_PATH" ]] &&
   echo "Using the verified copied Q4_0 draft model."
 else
   download_hf_file \
-    "$QWEN38_DRAFT_REPO" "$QWEN38_DRAFT_REVISION" "$QWEN38_DRAFT_BF16_FILE" "$QWEN38_DRAFT_BF16_SHA256" "$DRAFT_BF16_PATH"
+    "$QWEN38_DRAFT_REPO" "$QWEN38_DRAFT_REVISION" "$QWEN38_DRAFT_BF16_FILE" "$QWEN38_DRAFT_BF16_SHA256" "$DRAFT_BF16_PATH" "$QWEN38_DRAFT_BF16_BYTES"
   "$BUILD_DIR/bin/llama-quantize" "$DRAFT_BF16_PATH" "$DRAFT_Q4_PATH" Q4_0 "$(nproc)"
   echo "$QWEN38_DRAFT_Q4_SHA256  $DRAFT_Q4_PATH" | sha256sum -c -
 fi
 
 for required in \
   "$SCRIPT_DIR/run-qwen38-cloud.sh" \
+  "$SCRIPT_DIR/slot-cache-control.sh" \
   "$SCRIPT_DIR/run-tailscaled.sh" \
   "$SCRIPT_DIR/qwen38-cloud.conf" \
   "$SCRIPT_DIR/tailscaled-qwen.conf" \
@@ -196,6 +261,7 @@ done
 
 install -d -m 0755 /opt/supervisor-scripts /var/log/portal
 install -m 0755 "$SCRIPT_DIR/run-qwen38-cloud.sh" /opt/supervisor-scripts/run-qwen38-cloud.sh
+install -m 0755 "$SCRIPT_DIR/slot-cache-control.sh" /usr/local/bin/qwen38-slot-cache
 install -m 0755 "$SCRIPT_DIR/run-tailscaled.sh" /opt/supervisor-scripts/run-tailscaled.sh
 install -m 0644 "$SCRIPT_DIR/qwen38-cloud.conf" /etc/supervisor/conf.d/qwen38-cloud.conf
 install -m 0644 "$SCRIPT_DIR/tailscaled-qwen.conf" /etc/supervisor/conf.d/tailscaled-qwen.conf
@@ -207,7 +273,7 @@ if [[ ! -s "$QWEN38_ROOT/api_key" ]]; then
   openssl rand -hex 32 > "$QWEN38_ROOT/api_key"
 fi
 
-if ! supervisorctl status >/dev/null 2>&1; then
+if ! supervisorctl pid >/dev/null 2>&1; then
   supervisord -c /etc/supervisor/supervisord.conf
   sleep 1
 fi

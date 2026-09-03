@@ -23,6 +23,12 @@ def main() -> None:
     parser.add_argument("--max-tokens", type=int, default=2048)
     parser.add_argument("--seed", type=int, default=424242)
     parser.add_argument("--temperature", type=float)
+    parser.add_argument(
+        "--minimum-cached-tokens",
+        type=int,
+        default=0,
+        help="Fail after the safe request fallback if the server reused fewer prompt tokens.",
+    )
     args = parser.parse_args()
 
     payload = json.loads(args.capture.read_text())
@@ -51,13 +57,21 @@ def main() -> None:
     message = result["choices"][0]["message"]
     content = message.get("content") or ""
     reasoning = message.get("reasoning_content") or ""
+    timings = result.get("timings") or {}
+    prompt_details = (result.get("usage") or {}).get("prompt_tokens_details") or {}
+    cached_tokens = max(
+        int(timings.get("cache_n") or 0),
+        int(prompt_details.get("cached_tokens") or 0),
+    )
     print(
         json.dumps(
             {
                 "elapsed_seconds": round(elapsed, 3),
                 "finish_reason": result["choices"][0].get("finish_reason"),
                 "usage": result.get("usage"),
-                "timings": result.get("timings"),
+                "timings": timings,
+                "cached_tokens": cached_tokens,
+                "minimum_cached_tokens": args.minimum_cached_tokens,
                 "content_sha256": hashlib.sha256(content.encode()).hexdigest(),
                 "reasoning_sha256": hashlib.sha256(reasoning.encode()).hexdigest(),
                 "content_chars": len(content),
@@ -70,6 +84,12 @@ def main() -> None:
             sort_keys=True,
         )
     )
+    if cached_tokens < args.minimum_cached_tokens:
+        raise SystemExit(
+            f"cache prefix mismatch: reused {cached_tokens} tokens; "
+            f"required at least {args.minimum_cached_tokens}. "
+            "The server safely completed the request with a full prefill."
+        )
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ OpenAI-compatible Qwen model on a rented Vast.ai GPU. It starts compute on
 demand, keeps an open Pi session usable after idle shutdown, and stops paid GPU
 compute after ten minutes without an inference request.
 
-Version 0.3 is an alpha release. It is an official Pi package with a
+Version 0.4 is an alpha release. It is an official Pi package with a
 configurable provider adapter and
 model profile boundary, but supports one fully tested deployment profile:
 
@@ -68,7 +68,7 @@ normally starts much faster.
 Install the package from GitHub:
 
 ```sh
-pi install git:github.com/andrewting19/abliteration-station@v0.3.0
+pi install git:github.com/andrewting19/abliteration-station@v0.4.0
 ```
 
 Start Pi and run `/abliteration-setup`. On a root-based Pi server, this
@@ -138,12 +138,13 @@ longer need it.
 ## Measured reference result
 
 The accepted reference host used an RTX 5090, at least 32 GB of system RAM, and
-a qualified CPU and PCIe path. The corrected 117,046-token gate reached 119.0
-decode tokens per second. A separate 239,310-token near-limit gate reached 83.1
-decode tokens per second. A retained-host cold start has reached the model in
-about 30 to 47 seconds when Vast can return the same GPU. These results are not
-guarantees. Host CPU, PCIe, disk, network, and current Vast capacity can change
-them.
+a qualified CPU and PCIe path. A restored 117,046-token captured-Pi gate reached
+134.6 decode tokens per second. Seven consecutive live Pi turns at 53K to 59K
+context reached 85.6 token-weighted decode TPS. A separate live Pi turn reached
+approximately 76.5 TPS at 192K context. A retained-host cold start has reached
+the model in about 30 to 47 seconds when Vast can return the same GPU. These
+results are not guarantees. Host CPU, PCIe, disk, network, and current Vast
+capacity can change them.
 
 ## Security
 
@@ -167,7 +168,7 @@ The default test does not rent a GPU. The paid hardware acceptance test is in
 
 ## Limits
 
-- Version 0.3 supports only Vast.ai and one RTX 5090 profile.
+- Version 0.4 supports only Vast.ai and one RTX 5090 profile.
 - The installer supports root-based Linux systems with systemd.
 - The fast portable CUDA runtime is limited to the verified CUDA 13.2 RTX 5090
   profile. Other compatible hosts use the pinned source-build fallback.

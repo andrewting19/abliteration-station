@@ -76,3 +76,68 @@ class VastProvider:
             if instance_file.is_file()
             else None,
         }
+
+    def _cache_command(self) -> str:
+        command = self.config.get("cache_command")
+        if not command or not Path(command).is_file():
+            raise LifecycleError(f"Vast cache command is missing: {command}")
+        return str(command)
+
+    @staticmethod
+    def _instance_id(route: Route) -> str:
+        value = str(route.identity.get("instance_id", ""))
+        if not value.isdigit():
+            raise LifecycleError("Vast route does not contain a valid instance ID")
+        return value
+
+    def _run_cache_command(self, *arguments: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [self._cache_command(), *arguments],
+            text=True,
+            capture_output=True,
+            timeout=float(self.config.get("cache_transfer_timeout_seconds", 1800)),
+        )
+
+    def runtime_fingerprint(self, route: Route) -> dict[str, Any]:
+        result = self._run_cache_command("runtime-fingerprint", self._instance_id(route))
+        if result.returncode:
+            raise LifecycleError(f"Vast runtime fingerprint failed: {result.stderr.strip()}")
+        try:
+            value = json.loads(result.stdout)
+        except json.JSONDecodeError as error:
+            raise LifecycleError("Vast runtime fingerprint returned invalid JSON") from error
+        if not isinstance(value, dict) or not isinstance(value.get("fingerprint"), str):
+            raise LifecycleError("Vast runtime fingerprint returned invalid metadata")
+        return value
+
+    def export_cache(self, route: Route, filename: str, destination: Path) -> dict[str, Any]:
+        arguments = ["cache-export", self._instance_id(route), filename, str(destination)]
+        replace_mode = str(self.config.get("cache_replace_mode", "atomic"))
+        if replace_mode not in ("atomic", "in-place-safe"):
+            raise LifecycleError(f"Vast cache replace mode is invalid: {replace_mode}")
+        arguments.append(replace_mode)
+        result = self._run_cache_command(*arguments)
+        if result.returncode:
+            raise LifecycleError(f"Vast cache export failed: {result.stderr.strip()}")
+        try:
+            value = json.loads(result.stdout)
+        except json.JSONDecodeError as error:
+            raise LifecycleError("Vast cache export returned invalid JSON") from error
+        if not isinstance(value, dict):
+            raise LifecycleError("Vast cache export returned invalid metadata")
+        return value
+
+    def import_cache(
+        self, route: Route, filename: str, source: Path, manifest: dict[str, Any]
+    ) -> None:
+        hashes = manifest.get("sha256", {})
+        if not isinstance(hashes, dict) or not all(
+            hashes.get(key) for key in ("slot", "checkpoint", "archive")
+        ):
+            raise LifecycleError("portable cache metadata does not contain all required hashes")
+        result = self._run_cache_command(
+            "cache-import", self._instance_id(route), filename, str(source),
+            str(hashes["slot"]), str(hashes["checkpoint"]), str(hashes["archive"]),
+        )
+        if result.returncode:
+            raise LifecycleError(f"Vast cache import failed: {result.stderr.strip()}")

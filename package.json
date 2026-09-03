@@ -1,6 +1,6 @@
 {
   "name": "@andrewting19/abliteration-station",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Private abliterated models on demand for Pi.",
   "license": "MIT",
   "repository": {
@@ -32,6 +32,7 @@
     "benchmarks",
     "config",
     "docs",
+    "patches",
     "README.md",
     "LICENSE",
     "pyproject.toml"

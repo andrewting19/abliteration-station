@@ -1,0 +1,156 @@
+diff --git a/tools/server/server-context.cpp b/tools/server/server-context.cpp
+index e22b8e378..a38263979 100644
+--- a/tools/server/server-context.cpp
++++ b/tools/server/server-context.cpp
+@@ -26,6 +26,117 @@
+ #include <utility>
+ #include <fstream>
+
++namespace {
++
++constexpr char slot_checkpoint_magic[8] = {'A', 'S', 'C', 'K', 'P', 'T', '1', '\0'};
++constexpr uint32_t slot_checkpoint_version = 1;
++constexpr uint64_t slot_checkpoint_max_count = 1024;
++constexpr uint64_t slot_checkpoint_max_blob = 16ULL * 1024 * 1024 * 1024;
++constexpr uint64_t slot_checkpoint_max_file = 32ULL * 1024 * 1024 * 1024;
++
++template <typename T>
++void slot_checkpoint_write_value(std::ostream & out, const T & value) {
++    out.write(reinterpret_cast<const char *>(&value), sizeof(value));
++    if (!out) throw std::runtime_error("Unable to write slot checkpoint sidecar");
++}
++
++void slot_checkpoint_write_blob(std::ostream & out, const std::vector<uint8_t> & data) {
++    const uint64_t size = data.size();
++    slot_checkpoint_write_value(out, size);
++    if (size > 0) out.write(reinterpret_cast<const char *>(data.data()), size);
++    if (!out) throw std::runtime_error("Unable to write slot checkpoint sidecar data");
++}
++
++template <typename T>
++T slot_checkpoint_read_value(std::istream & in) {
++    T value{};
++    in.read(reinterpret_cast<char *>(&value), sizeof(value));
++    if (!in) throw std::runtime_error("Truncated slot checkpoint sidecar");
++    return value;
++}
++
++std::vector<uint8_t> slot_checkpoint_read_blob(std::istream & in, uint64_t & remaining) {
++    const uint64_t size = slot_checkpoint_read_value<uint64_t>(in);
++    if (size > slot_checkpoint_max_blob) throw std::runtime_error("Slot checkpoint sidecar blob is too large");
++    if (size > remaining) throw std::runtime_error("Slot checkpoint sidecar blob exceeds the file boundary");
++    std::vector<uint8_t> data(size);
++    if (size > 0) in.read(reinterpret_cast<char *>(data.data()), size);
++    if (!in) throw std::runtime_error("Truncated slot checkpoint sidecar data");
++    remaining -= size;
++    return data;
++}
++
++void slot_checkpoints_save(const std::string & filepath, const std::list<common_prompt_checkpoint> & checkpoints) {
++    if (checkpoints.size() > slot_checkpoint_max_count) {
++        throw std::runtime_error("Too many slot checkpoints to save");
++    }
++    const std::string final_path = filepath + ".ckpt";
++    const std::string temporary_path = final_path + ".tmp";
++    std::error_code cleanup_error;
++    std::filesystem::remove(temporary_path, cleanup_error);
++    std::ofstream out(temporary_path, std::ios::binary | std::ios::trunc);
++    if (!out) throw std::runtime_error("Unable to create slot checkpoint sidecar");
++    out.write(slot_checkpoint_magic, sizeof(slot_checkpoint_magic));
++    slot_checkpoint_write_value(out, slot_checkpoint_version);
++    slot_checkpoint_write_value(out, static_cast<uint64_t>(checkpoints.size()));
++    for (const auto & checkpoint : checkpoints) {
++        slot_checkpoint_write_value(out, checkpoint.n_tokens);
++        slot_checkpoint_write_value(out, checkpoint.id_task);
++        slot_checkpoint_write_value(out, checkpoint.pos_min);
++        slot_checkpoint_write_value(out, checkpoint.pos_max);
++        slot_checkpoint_write_blob(out, checkpoint.data_tgt);
++        slot_checkpoint_write_blob(out, checkpoint.data_dft);
++        slot_checkpoint_write_blob(out, checkpoint.data_spec);
++    }
++    try {
++        out.flush();
++        if (!out) throw std::runtime_error("Unable to flush slot checkpoint sidecar");
++        out.close();
++        if (std::filesystem::file_size(temporary_path) > slot_checkpoint_max_file) {
++            throw std::runtime_error("Slot checkpoint sidecar is too large");
++        }
++        std::filesystem::rename(temporary_path, final_path);
++    } catch (...) {
++        out.close();
++        std::filesystem::remove(temporary_path, cleanup_error);
++        throw;
++    }
++}
++
++std::list<common_prompt_checkpoint> slot_checkpoints_load(const std::string & filepath) {
++    const std::string checkpoint_path = filepath + ".ckpt";
++    const uint64_t file_size = std::filesystem::file_size(checkpoint_path);
++    if (file_size > slot_checkpoint_max_file) throw std::runtime_error("Slot checkpoint sidecar is too large");
++    uint64_t remaining = file_size;
++    std::ifstream in(checkpoint_path, std::ios::binary);
++    if (!in) throw std::runtime_error("Slot checkpoint sidecar is missing");
++    char magic[sizeof(slot_checkpoint_magic)]{};
++    in.read(magic, sizeof(magic));
++    if (!in || !std::equal(std::begin(magic), std::end(magic), std::begin(slot_checkpoint_magic))) {
++        throw std::runtime_error("Invalid slot checkpoint sidecar magic");
++    }
++    const uint32_t version = slot_checkpoint_read_value<uint32_t>(in);
++    if (version != slot_checkpoint_version) throw std::runtime_error("Unsupported slot checkpoint sidecar version");
++    const uint64_t count = slot_checkpoint_read_value<uint64_t>(in);
++    if (count > slot_checkpoint_max_count) throw std::runtime_error("Slot checkpoint sidecar has too many checkpoints");
++    std::list<common_prompt_checkpoint> checkpoints;
++    for (uint64_t index = 0; index < count; ++index) {
++        auto & checkpoint = checkpoints.emplace_back();
++        checkpoint.n_tokens = slot_checkpoint_read_value<int64_t>(in);
++        checkpoint.id_task = -1;
++        (void) slot_checkpoint_read_value<int>(in);
++        checkpoint.pos_min = slot_checkpoint_read_value<llama_pos>(in);
++        checkpoint.pos_max = slot_checkpoint_read_value<llama_pos>(in);
++        checkpoint.data_tgt = slot_checkpoint_read_blob(in, remaining);
++        checkpoint.data_dft = slot_checkpoint_read_blob(in, remaining);
++        checkpoint.data_spec = slot_checkpoint_read_blob(in, remaining);
++    }
++    if (in.peek() != std::ifstream::traits_type::eof()) throw std::runtime_error("Slot checkpoint sidecar has trailing data");
++    return checkpoints;
++}
++
++} // namespace
++
+ // fix problem with std::min and std::max
+ #if defined(_WIN32)
+ #define WIN32_LEAN_AND_MEAN
+@@ -2464,6 +2575,12 @@ private:
+                         send_error(task, "Unable to save slot", ERROR_TYPE_SERVER);
+                         break;
+                     }
++                    try {
++                        slot_checkpoints_save(filepath, slot->prompt.checkpoints);
++                    } catch (const std::exception & err) {
++                        send_error(task, std::string("Unable to save slot checkpoints: ") + err.what(), ERROR_TYPE_SERVER);
++                        break;
++                    }
+
+                     const int64_t t_end = ggml_time_us();
+                     const double t_save_ms = (t_end - t_start) / 1000.0;
+@@ -2522,8 +2639,20 @@ private:
+                             throw std::runtime_error("Invalid tokens in slot save file");
+                         }
+
++                        auto checkpoints = slot_checkpoints_load(filepath);
++                        if (ctx_dft != nullptr && !checkpoints.empty()) {
++                            const auto & checkpoint = checkpoints.back();
++                            if (checkpoint.n_tokens <= 0 || (size_t) checkpoint.n_tokens > restored.size()) {
++                                throw std::runtime_error("Invalid final slot checkpoint token count");
++                            }
++                            checkpoint.load_tgt(ctx_tgt, slot->id, LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY);
++                            checkpoint.load_dft(ctx_dft, slot->id, LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY);
++                            common_speculative_set_state(slot->spec, slot->id, checkpoint.data_spec);
++                            restored.keep_first(checkpoint.n_tokens);
++                        }
+                         slot->prompt.clear();
+                         slot->prompt.tokens = std::move(restored);
++                        slot->prompt.checkpoints = std::move(checkpoints);
+                     } catch (const std::exception & err) {
+                         slot->prompt_clear();
+                         send_error(task, std::string("Unable to restore slot: ") + err.what(), ERROR_TYPE_INVALID_REQUEST);

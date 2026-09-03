@@ -311,7 +311,7 @@ resume_instance() {
   ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
     -i "$SSH_KEY" -p "$port" "root@$host" '
       set -euo pipefail
-      if ! supervisorctl status >/dev/null 2>&1; then
+      if ! supervisorctl pid >/dev/null 2>&1; then
         supervisord -c /etc/supervisor/supervisord.conf
         sleep 1
       fi
@@ -617,6 +617,128 @@ rent_balanced() {
   die "No modern-CPU balanced offer could be secured after 60 attempts"
 }
 
+validate_cache_filename() {
+  [[ "$1" =~ ^[A-Za-z0-9._-]+$ ]] || die "The cache filename contains unsafe characters"
+  [[ "$1" != "." && "$1" != ".." ]] || die "The cache filename is not valid"
+}
+
+validate_cache_directory() {
+  local value=$1 component
+  [[ "$value" == /* ]] || die "The cache directory must be an absolute path"
+  [[ "$value" =~ ^/[A-Za-z0-9._/-]+$ ]] || die "The cache directory contains unsafe characters"
+  IFS='/' read -r -a components <<<"$value"
+  for component in "${components[@]}"; do
+    [[ "$component" != ".." ]] || die "The cache directory cannot contain a parent traversal"
+  done
+}
+
+cache_export() {
+  local instance_id=$1 filename=$2 destination=$3 replace_mode=${4:-atomic}
+  local endpoint host port remote metadata archive temporary output
+  [[ "$instance_id" =~ ^[0-9]+$ ]] || die "Instance ID must be numeric"
+  validate_cache_filename "$filename"
+  validate_cache_directory "$destination"
+  [[ "$replace_mode" == atomic || "$replace_mode" == in-place-safe ]] ||
+    die "The cache replace mode must be atomic or in-place-safe"
+  endpoint=$(wait_ssh "$instance_id")
+  IFS=$'\t' read -r host port <<<"$endpoint"
+  remote="/workspace/qwen38/slot-cache/$filename"
+  install -d -m 0700 "$destination"
+  metadata=$(ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+    -i "$SSH_KEY" -p "$port" "root@$host" \
+    "set -e; test -s '$remote'; test -s '$remote.ckpt'; printf '%s\\t%s\\t%s\\t%s\\n' \"\$(sha256sum '$remote' | cut -d' ' -f1)\" \"\$(sha256sum '$remote.ckpt' | cut -d' ' -f1)\" \"\$(stat -c %s '$remote')\" \"\$(stat -c %s '$remote.ckpt')\"")
+  archive="$destination/$filename.tar.zst"
+  temporary="$archive.tmp"
+  output=$temporary
+  if [[ "$replace_mode" == in-place-safe ]]; then
+    # The verified slot and checkpoint remain on the running GPU while this
+    # file is replaced. The controller must not stop the provider unless this
+    # export succeeds and its state file is committed.
+    output=$archive
+  fi
+  rm -f -- "$temporary"
+  if ! ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+      -i "$SSH_KEY" -p "$port" "root@$host" \
+      "tar -C /workspace/qwen38/slot-cache -cf - '$filename' '$filename.ckpt' | zstd -T0 -3 -c" >"$output"; then
+    rm -f -- "$output"
+    die "The compressed cache transfer failed"
+  fi
+  [[ -s "$output" ]] || { rm -f -- "$output"; die "The compressed cache archive is empty"; }
+  chmod 0600 "$output"
+  if [[ "$replace_mode" == atomic ]]; then
+    mv -f -- "$temporary" "$archive"
+  fi
+  IFS=$'\t' read -r slot_sha checkpoint_sha slot_bytes checkpoint_bytes <<<"$metadata"
+  jq -n \
+    --arg slot "$slot_sha" --arg checkpoint "$checkpoint_sha" \
+    --arg archive "$(sha256sum "$archive" | cut -d' ' -f1)" \
+    --argjson slot_bytes "$slot_bytes" --argjson checkpoint_bytes "$checkpoint_bytes" \
+    --argjson archive_bytes "$(stat -c %s "$archive")" \
+    '{schema_version:1,compression:"tar+zstd-3",sha256:{slot:$slot,checkpoint:$checkpoint,archive:$archive},bytes:{slot:$slot_bytes,checkpoint:$checkpoint_bytes,archive:$archive_bytes}}'
+}
+
+cache_import() {
+  local instance_id=$1 filename=$2 source=$3 slot_sha=$4 checkpoint_sha=$5 archive_sha=$6 endpoint host port remote archive
+  [[ "$instance_id" =~ ^[0-9]+$ ]] || die "Instance ID must be numeric"
+  validate_cache_filename "$filename"
+  validate_cache_directory "$source"
+  [[ "$slot_sha" =~ ^[0-9a-f]{64}$ && "$checkpoint_sha" =~ ^[0-9a-f]{64}$ && "$archive_sha" =~ ^[0-9a-f]{64}$ ]] ||
+    die "The expected cache hashes are invalid"
+  archive="$source/$filename.tar.zst"
+  [[ -s "$archive" ]] || die "The local cache archive is missing"
+  echo "$archive_sha  $archive" | sha256sum -c - >/dev/null || die "The cache archive hash does not match"
+  mapfile -t archive_members < <(zstd -dc -- "$archive" | tar -tf -)
+  [[ ${#archive_members[@]} -eq 2 ]] || die "The cache archive must contain exactly two files"
+  printf '%s\n' "${archive_members[@]}" | sort | cmp -s - <(
+    printf '%s\n' "$filename" "$filename.ckpt" | sort
+  ) || die "The cache archive contains unexpected paths"
+  endpoint=$(wait_ssh "$instance_id")
+  IFS=$'\t' read -r host port <<<"$endpoint"
+  remote=/workspace/qwen38/slot-cache
+  if ! zstd -dc -- "$archive" | ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+      -i "$SSH_KEY" -p "$port" "root@$host" \
+      "set -euo pipefail; incoming='$remote/.incoming-$filename'; trap 'rm -rf -- \"\$incoming\"' EXIT; rm -rf -- \"\$incoming\"; install -d -m 0700 \"\$incoming\"; tar -C \"\$incoming\" -xf -; printf '%s  %s\\n' '$slot_sha' \"\$incoming/$filename\" | sha256sum -c - >/dev/null; printf '%s  %s\\n' '$checkpoint_sha' \"\$incoming/$filename.ckpt\" | sha256sum -c - >/dev/null; chmod 0600 \"\$incoming/$filename\" \"\$incoming/$filename.ckpt\"; mv -f \"\$incoming/$filename\" '$remote/$filename'; mv -f \"\$incoming/$filename.ckpt\" '$remote/$filename.ckpt'"; then
+    die "The cache import or remote hash verification failed"
+  fi
+}
+
+runtime_fingerprint() {
+  local instance_id=$1 endpoint host port
+  [[ "$instance_id" =~ ^[0-9]+$ ]] || die "Instance ID must be numeric"
+  endpoint=$(wait_ssh "$instance_id")
+  IFS=$'\t' read -r host port <<<"$endpoint"
+  ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+    -i "$SSH_KEY" -p "$port" "root@$host" 'bash -s' <<'REMOTE'
+set -euo pipefail
+root=/workspace/qwen38
+pid=$(pgrep -o -f '/llama-server --model' || true)
+[[ "$pid" =~ ^[0-9]+$ ]] || { echo "The active llama-server process was not found" >&2; exit 1; }
+exe=$(readlink -f "/proc/$pid/exe")
+[[ "$exe" == "$root"/*/bin/llama-server ]] || { echo "The server executable is outside the expected workspace" >&2; exit 1; }
+runtime_files=$({
+  printf '%s\n' "$exe"
+  ldd "$exe" | awk '$2 == "=>" && $3 ~ /^\// {print $3} $1 ~ /^\// {print $1}'
+} | while IFS= read -r path; do
+  resolved=$(readlink -f "$path")
+  if [[ "$resolved" == "$root"/* ]]; then
+    printf '%s\n' "$resolved"
+  fi
+done | sort -u)
+[[ -n "$runtime_files" ]] || { echo "No workspace runtime files were found" >&2; exit 1; }
+binary_manifest=$(printf '%s\n' "$runtime_files" | xargs sha256sum | sed "s#$root/#WORKSPACE/#")
+binary_sha=$(printf '%s\n' "$binary_manifest" | sha256sum | cut -d' ' -f1)
+argv_sha=$(tr '\0' '\n' <"/proc/$pid/cmdline" | sed "s#$root/#WORKSPACE/#g" | sha256sum | cut -d' ' -f1)
+runtime_env_sha=$(sed "s#$root/#WORKSPACE/#g" "$root/runtime.env" | sha256sum | cut -d' ' -f1)
+components=$(printf '%s\n%s\n%s\n%s\n' "$binary_sha" "$argv_sha" \
+  'b4c9721ab6ed1b7d1d1863b8f43e2fbce6a88dab39ea4333d2e74a7ad69580fe' \
+  '3db1e714ed60a0765f117353f4747f9c83d0f2b74da6c1049e0890af22ad6e3a')
+fingerprint=$(printf '%s' "$components" | sha256sum | cut -d' ' -f1)
+jq -n --arg fingerprint "$fingerprint" --arg binary_manifest_sha256 "$binary_sha" \
+  --arg argv_sha256 "$argv_sha" --arg runtime_env_sha256 "$runtime_env_sha" \
+  '{schema_version:1,fingerprint:$fingerprint,binary_manifest_sha256:$binary_manifest_sha256,argv_sha256:$argv_sha256,runtime_env_sha256:$runtime_env_sha256}'
+REMOTE
+}
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -637,6 +759,9 @@ Usage:
   qwen-vast resume INSTANCE_ID
   qwen-vast capture-private-state INSTANCE_ID
   qwen-vast activate-route NEW_INSTANCE_ID [OLD_INSTANCE_ID]
+  qwen-vast cache-export INSTANCE_ID SAFE_FILENAME ABSOLUTE_DESTINATION [atomic|in-place-safe]
+  qwen-vast cache-import INSTANCE_ID SAFE_FILENAME ABSOLUTE_SOURCE SLOT_SHA256 CHECKPOINT_SHA256 ARCHIVE_SHA256
+  qwen-vast runtime-fingerprint INSTANCE_ID
 
 The rent command does not spend money unless the final argument is --rent.
 Destruction is intentionally not automated.
@@ -665,6 +790,9 @@ case "${1:-}" in
   resume) need_auth; resume_instance "${2:?Instance ID is required}" ;;
   capture-private-state) need_auth; capture_private_state "${2:?Instance ID is required}" ;;
   activate-route) need_auth; activate_private_route "${2:?New instance ID is required}" "${3:-}" ;;
+  cache-export) need_auth; cache_export "${2:?Instance ID is required}" "${3:?Filename is required}" "${4:?Destination is required}" "${5:-atomic}" ;;
+  cache-import) need_auth; cache_import "${2:?Instance ID is required}" "${3:?Filename is required}" "${4:?Source is required}" "${5:?Slot hash is required}" "${6:?Checkpoint hash is required}" "${7:?Archive hash is required}" ;;
+  runtime-fingerprint) need_auth; runtime_fingerprint "${2:?Instance ID is required}" ;;
   -h|--help|help|'') usage ;;
   *) usage >&2; exit 2 ;;
 esac

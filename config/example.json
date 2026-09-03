@@ -6,6 +6,17 @@
   "route_file": "/run/abliteration-station/route.json",
   "inference_key_file": "/root/.config/abliteration-station/inference_api_key",
   "chat_gate_timeout_seconds": 180,
+  "kv_cache": {
+    "enabled": true,
+    "slot_id": 0,
+    "filename": "pi-session.slot",
+    "state_file": "/var/lib/abliteration-station/kv-cache-state.json",
+    "artifact_directory": "/var/lib/abliteration-station/kv-cache",
+    "runtime_fingerprint": "qwen38-q3-262144-medium-v1",
+    "required_before_stop": true,
+    "save_timeout_seconds": 900,
+    "restore_timeout_seconds": 900
+  },
   "model": {
     "id": "qwen38-cloud",
     "display_name": "Qwen3.8 27B Unleashed Q3 + DFlash2",
@@ -18,10 +29,13 @@
     "vast": {
       "adapter": "abliteration_station.providers.vast:VastProvider",
       "ensure_command": "/usr/local/lib/abliteration-station/vast/ensure",
+      "cache_command": "/usr/local/lib/abliteration-station/vast/qwen-vast",
+      "cache_replace_mode": "atomic",
       "instance_file": "/var/lib/abliteration-station/vast-instance-id",
       "lifecycle_token_file": "/root/.config/vastai/vast_api_key",
       "upstream": "http://qwen38-vast:17070",
-      "start_timeout_seconds": 7200
+      "start_timeout_seconds": 7200,
+      "cache_transfer_timeout_seconds": 1800
     }
   }
 }

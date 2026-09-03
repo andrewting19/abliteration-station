@@ -11,10 +11,16 @@ usage() {
 SSH_HOST=$1
 SSH_PORT=$2
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+source "$SCRIPT_DIR/portable-manifest.env"
 SSH_KEY=${3:-$HOME/.ssh/abliteration-station-vast}
 INSTANCE_ID=${4:-null}
 PROGRESS_COMMAND=${ABLITERATION_STATION_PROGRESS_COMMAND:-/usr/local/bin/abliteration-station-progress}
 REMOTE_STAGE=/tmp/qwen38-portable
+PATCH_FILE="$SCRIPT_DIR/patches/llama-slot-checkpoints.patch"
+if [[ ! -s "$PATCH_FILE" ]]; then
+  PATCH_FILE="$SCRIPT_DIR/../../patches/llama-slot-checkpoints.patch"
+fi
+[[ -s "$PATCH_FILE" ]] || { echo "The verified llama.cpp patch is missing." >&2; exit 1; }
 
 [[ "$SSH_PORT" =~ ^[0-9]+$ ]] || usage
 [[ -s "$SSH_KEY" ]] || { echo "SSH key not found: $SSH_KEY" >&2; exit 1; }
@@ -35,14 +41,16 @@ progress runtime_assets "Sending the verified runtime assets" 45
 "${SCP[@]}" \
   "$SCRIPT_DIR/bootstrap-fresh-vast.sh" \
   "$SCRIPT_DIR/portable-manifest.env" \
+  "$PATCH_FILE" \
   "$SCRIPT_DIR/run-qwen38-cloud.sh" \
+  "$SCRIPT_DIR/slot-cache-control.sh" \
   "$SCRIPT_DIR/run-tailscaled.sh" \
   "$SCRIPT_DIR/qwen38-cloud.conf" \
   "$SCRIPT_DIR/tailscaled-qwen.conf" \
   "$SCRIPT_DIR/runtime.env" \
   "root@$SSH_HOST:$REMOTE_STAGE/"
 
-BUILD_CACHE_NAME=llama-build-cuda13-sm120a.tar.zst
+BUILD_CACHE_NAME=$QWEN38_BUILD_CACHE_FILE
 if [[ -s "$SCRIPT_DIR/cache/$BUILD_CACHE_NAME" && \
       -s "$SCRIPT_DIR/cache/$BUILD_CACHE_NAME.sha256" ]]; then
   "${SCP[@]}" \

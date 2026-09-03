@@ -15,7 +15,11 @@ CONTEXT_SIZE="${QWEN38_CONTEXT_SIZE:-262144}"
 PARALLEL="${QWEN38_PARALLEL:-1}"
 BUILD_DIR="${QWEN38_BUILD_DIR:-build}"
 LLAMA_DIR="${QWEN38_LLAMA_DIR:-$ROOT/llama.cpp}"
-SERVER="$LLAMA_DIR/$BUILD_DIR/bin/llama-server"
+SERVER_DIR="$LLAMA_DIR/$BUILD_DIR/bin"
+SERVER="$SERVER_DIR/llama-server"
+# Release builds can contain an absolute CMake build path. Always resolve the
+# bundled shared libraries from the extracted artifact directory first.
+export LD_LIBRARY_PATH="$SERVER_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 DRAFT_QUANT="${QWEN38_DRAFT_QUANT:-Q8_0}"
 DRAFT="$ROOT/models/Qwen3.8-27B-DFlash2-${DRAFT_QUANT}.gguf"
 DRAFT_N_MAX="${QWEN38_DRAFT_N_MAX:-6}"
@@ -39,14 +43,29 @@ THREADS="${QWEN38_THREADS:-$AUTO_THREADS}"
 PREWARM="${QWEN38_PREWARM:-1}"
 TEMPERATURE="${QWEN38_TEMPERATURE:-1.0}"
 CHAT_TEMPLATE="${QWEN38_CHAT_TEMPLATE:-}"
+BACKEND_SAMPLING="${QWEN38_BACKEND_SAMPLING:-0}"
+DRAFT_BACKEND_SAMPLING="${QWEN38_DRAFT_BACKEND_SAMPLING:-1}"
 
 EXTRA_ARGS=()
 SPEC_ARGS=()
+SPEC_MODEL_ARGS=()
 if [[ "$NO_HOST" == "1" ]]; then
   EXTRA_ARGS+=(--no-host)
 fi
 if [[ -n "$CHAT_TEMPLATE" ]]; then
   EXTRA_ARGS+=(--chat-template "$CHAT_TEMPLATE")
+fi
+if [[ "$BACKEND_SAMPLING" == "1" ]]; then
+  EXTRA_ARGS+=(--backend-sampling)
+elif [[ "$BACKEND_SAMPLING" != "0" ]]; then
+  echo "QWEN38_BACKEND_SAMPLING must be 0 or 1" >&2
+  exit 1
+fi
+if [[ "$DRAFT_BACKEND_SAMPLING" == "0" ]]; then
+  SPEC_ARGS+=(--no-spec-draft-backend-sampling)
+elif [[ "$DRAFT_BACKEND_SAMPLING" != "1" ]]; then
+  echo "QWEN38_DRAFT_BACKEND_SAMPLING must be 0 or 1" >&2
+  exit 1
 fi
 if [[ -n "$DRAFT_P_MIN" ]]; then
   SPEC_ARGS+=(--spec-draft-p-min "$DRAFT_P_MIN")
@@ -60,30 +79,41 @@ if [[ -n "$NGRAM_N" || -n "$NGRAM_M" ]]; then
   SPEC_ARGS+=(--spec-ngram-simple-size-m "$NGRAM_M")
 fi
 
-for path in "$SERVER" "$MODEL" "$DRAFT" "$API_KEY_FILE"; do
+for path in "$SERVER" "$MODEL" "$API_KEY_FILE"; do
   if [[ ! -s "$path" ]]; then
     echo "Required file is missing or empty: $path" >&2
     exit 1
   fi
 done
 
+if [[ "$SPEC_TYPE" != "none" ]]; then
+  [[ -s "$DRAFT" ]] || { echo "Required file is missing or empty: $DRAFT" >&2; exit 1; }
+  SPEC_MODEL_ARGS+=(
+    --spec-draft-model "$DRAFT"
+    --spec-type "$SPEC_TYPE"
+    --spec-draft-ngl all
+    --spec-draft-type-k "$DRAFT_CACHE_TYPE_K"
+    --spec-draft-type-v "$DRAFT_CACHE_TYPE_V"
+    --spec-draft-n-max "$DRAFT_N_MAX"
+  )
+else
+  SPEC_MODEL_ARGS+=(--spec-type none)
+fi
+
 if [[ "$PREWARM" == "1" ]]; then
   # Sequential reads avoid very slow random mmap page faults on some Vast
   # overlay disks. Both files fit in host RAM on the selected 5090 offers.
   dd if="$MODEL" of=/dev/null bs=64M status=none
-  dd if="$DRAFT" of=/dev/null bs=64M status=none
+  if [[ "$SPEC_TYPE" != "none" ]]; then
+    dd if="$DRAFT" of=/dev/null bs=64M status=none
+  fi
 fi
 
 mkdir -p "$ROOT/slot-cache"
 
 exec "$SERVER" \
   --model "$MODEL" \
-  --spec-draft-model "$DRAFT" \
-  --spec-type "$SPEC_TYPE" \
-  --spec-draft-ngl all \
-  --spec-draft-type-k "$DRAFT_CACHE_TYPE_K" \
-  --spec-draft-type-v "$DRAFT_CACHE_TYPE_V" \
-  --spec-draft-n-max "$DRAFT_N_MAX" \
+  "${SPEC_MODEL_ARGS[@]}" \
   "${SPEC_ARGS[@]}" \
   --alias qwen38-cloud \
   --api-key-file "$API_KEY_FILE" \

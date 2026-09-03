@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import fcntl
+import hashlib
 import importlib
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -98,6 +100,124 @@ class Controller:
             raise LifecycleError("model endpoint returned invalid JSON")
         return result
 
+    def _cache_config(self) -> dict[str, Any] | None:
+        cache = self.config.get("kv_cache", {})
+        if not isinstance(cache, dict) or not cache.get("enabled", False):
+            return None
+        return cache
+
+    def _cache_fingerprint(self) -> str:
+        model = self.config.get("model", {})
+        cache = self._cache_config() or {}
+        identity = {
+            "model_id": model.get("id"),
+            "context_size": model.get("context_size"),
+            "quant_prefix": model.get("quant_prefix"),
+            "runtime_fingerprint": cache.get("runtime_fingerprint"),
+            "slot_id": int(cache.get("slot_id", 0)),
+            "filename": cache.get("filename", "pi-session.slot"),
+        }
+        value = json.dumps(identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return hashlib.sha256(value).hexdigest()
+
+    def _cache_state_file(self) -> Path:
+        cache = self._cache_config() or {}
+        return Path(cache.get("state_file", "/var/lib/abliteration-station/kv-cache-state.json"))
+
+    def _cache_artifact_directory(self) -> Path:
+        cache = self._cache_config() or {}
+        return Path(cache.get("artifact_directory", "/var/lib/abliteration-station/kv-cache"))
+
+    def save_cache(self, route: Route) -> bool:
+        cache = self._cache_config()
+        if cache is None:
+            return False
+        slot_id = int(cache.get("slot_id", 0))
+        filename = str(cache.get("filename", "pi-session.slot"))
+        try:
+            response = self._request_json(
+                route.upstream,
+                f"/slots/{slot_id}?action=save",
+                body={"filename": filename},
+                timeout=float(cache.get("save_timeout_seconds", 600)),
+            )
+            if response.get("error"):
+                raise LifecycleError(f"slot save returned an error: {response['error']}")
+            n_saved = response.get("n_saved")
+            if not isinstance(n_saved, int) or n_saved <= 0:
+                raise LifecycleError(
+                    f"slot save returned an invalid token count: {n_saved!r}"
+                )
+            provider = make_provider(route.provider, self.config)
+            runtime_method = getattr(provider, "runtime_fingerprint", None)
+            export = getattr(provider, "export_cache", None)
+            if not callable(runtime_method):
+                raise LifecycleError(f"provider {route.provider} cannot identify its live runtime")
+            if not callable(export):
+                raise LifecycleError(f"provider {route.provider} cannot export a portable cache")
+            runtime = runtime_method(route)
+            artifact = export(route, filename, self._cache_artifact_directory())
+            atomic_json(
+                self._cache_state_file(),
+                {
+                    "schema_version": 1,
+                    "fingerprint": self._cache_fingerprint(),
+                    "runtime": runtime,
+                    "provider": route.provider,
+                    "identity": route.identity,
+                    "filename": filename,
+                    "saved_unix_ms": int(time.time() * 1000),
+                    "artifact": artifact,
+                    "server_response": {
+                        key: response[key]
+                        for key in ("filename", "n_saved", "n_written", "timings")
+                        if key in response
+                    },
+                },
+            )
+            return True
+        except (LifecycleError, OSError, TypeError, ValueError) as error:
+            print(f"KV cache save was not available; continuing with a cold fallback: {error}", file=sys.stderr)
+            return False
+
+    def restore_cache(self, route: Route) -> bool:
+        cache = self._cache_config()
+        if cache is None:
+            return False
+        try:
+            state = json.loads(self._cache_state_file().read_text(encoding="utf-8"))
+            if state.get("fingerprint") != self._cache_fingerprint():
+                raise LifecycleError("checkpoint fingerprint does not match this model runtime")
+            provider = make_provider(route.provider, self.config)
+            runtime_method = getattr(provider, "runtime_fingerprint", None)
+            if not callable(runtime_method):
+                raise LifecycleError(f"provider {route.provider} cannot identify its live runtime")
+            saved_runtime = state.get("runtime")
+            live_runtime = runtime_method(route)
+            if not isinstance(saved_runtime, dict) or saved_runtime.get("fingerprint") != live_runtime.get("fingerprint"):
+                raise LifecycleError("checkpoint live-runtime fingerprint does not match this host")
+            if state.get("identity") != route.identity:
+                import_cache = getattr(provider, "import_cache", None)
+                if not callable(import_cache):
+                    raise LifecycleError(f"provider {route.provider} cannot import a portable cache")
+                artifact = state.get("artifact")
+                if not isinstance(artifact, dict):
+                    raise LifecycleError("portable cache metadata is missing")
+                import_cache(route, str(state["filename"]), self._cache_artifact_directory(), artifact)
+            slot_id = int(cache.get("slot_id", 0))
+            response = self._request_json(
+                route.upstream,
+                f"/slots/{slot_id}?action=restore",
+                body={"filename": str(state["filename"])},
+                timeout=float(cache.get("restore_timeout_seconds", 600)),
+            )
+            if response.get("error"):
+                raise LifecycleError(f"slot restore returned an error: {response['error']}")
+            return True
+        except (LifecycleError, OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+            print(f"KV cache restore was not available; using a cold prefill: {error}", file=sys.stderr)
+            return False
+
     def model_gate(self, upstream: str) -> None:
         response = self._request_json(upstream, "/v1/models", timeout=10)
         expected_model = self.config["model"]["id"]
@@ -155,6 +275,7 @@ class Controller:
                 route = provider.ensure()
                 self.model_gate(route.upstream)
                 self.chat_gate(route.upstream)
+                self.restore_cache(route)
                 atomic_json(
                     self.route_file,
                     {
@@ -186,11 +307,16 @@ class Controller:
             lock_handle.close()
 
     def stop(self, provider_name: str | None = None) -> None:
-        if provider_name is None and self.route_file.is_file():
-            route = json.loads(self.route_file.read_text(encoding="utf-8"))
-            provider_name = route.get("provider")
+        active = self._active_route()
+        if provider_name is None and active is not None:
+            provider_name = active.provider
         if not provider_name:
             raise LifecycleError("no active provider is recorded")
+        if active is not None and active.provider == provider_name:
+            saved = self.save_cache(active)
+            cache = self._cache_config()
+            if cache is not None and cache.get("required_before_stop", True) and not saved:
+                raise LifecycleError("provider stop was cancelled because the required KV cache save failed")
         make_provider(provider_name, self.config).stop()
         self.route_file.unlink(missing_ok=True)
 

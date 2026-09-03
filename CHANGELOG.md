@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.0 - 2026-09-03
+
+- Add portable, checksum-verified KV-cache save, transfer, import, and restore
+  across server restarts, retained-host starts, and replacement Vast hosts.
+- Add runtime fingerprints so an incompatible binary, model, or launch profile
+  cannot receive a saved cache.
+- Add target and DFlash checkpoint restoration. Roll back to the last complete
+  shared checkpoint and replay only the unmatched prompt suffix.
+- Fix `decode() failed: failed to process speculative batch` after restoring a
+  long target cache without the matching DFlash state.
+- Reject empty slot saves before they can replace a valid portable cache.
+- Publish the pinned CUDA 13.2 RTX 5090 fused-DFlash runtime and load its shared
+  libraries from the extracted artifact directory.
+- Add real Pi request capture, cache-cycle, cancellation, long-context, and
+  token-weighted performance instruments.
+- Keep Q3_K_XL, Q4_0 DFlash, 262K context, native medium thinking, and
+  temperature 1 as the accepted profile.
+
 ## 0.3.0 - 2026-09-02
 
 - Remove the failed provider-copy experiment from the default request path.

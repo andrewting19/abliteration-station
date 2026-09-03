@@ -89,3 +89,46 @@ at 112.60 decode tokens per second.
 
 Version 0.3 does not claim support for other providers, GPUs, operating systems,
 model variants, or multiple concurrent long-context slots.
+
+## Portable cache candidate
+
+The 2026-09-02 candidate restored a private 160K real-Pi prefix across a clean
+runtime restart, a retained Vast stop/start, and a replacement RTX 5090. The
+server reported 160,552 cached tokens and four prompt-evaluation tokens after
+each accepted restore. Restore time was approximately 0.6 seconds. A live
+cancellation released the server immediately.
+
+The official candidate was installed on Kevin and restored the same 160,552
+token prefix through the normal private proxy. A 2,048-token allowance ended
+naturally after 555 tokens with valid `agent_result` and `bash` calls. Two
+additional samples also ended with valid tool calls. On the selected
+Threadripper host, the three samples reached 71.14 token-weighted decode TPS.
+
+Version 0.4 includes this cache path. The installed Kevin idle-save and
+wake-restore gate and the documented rollback test remain alpha limitations.
+The local release and private-artifact security scans pass.
+
+## Fused DFlash candidate
+
+The portable candidate uses current llama.cpp commit
+`7339054744f109c4cd89b75689dbb8a2c154d60e`, the project slot-checkpoint
+patch, CUDA DFlash KV fusion, and backend sampling. A clean official deploy
+from the public checksum-verified runtime artifact passed the 117,046-token
+captured Pi gate at 120.32 TPS. A repeat reached 120.65 TPS. The integrated
+tool loop passed.
+
+The same weak-CPU test host reached 79.35 token-weighted TPS across 1,794
+tokens at a 160,556-token cached prefix. Its target-only control was 49.0 TPS.
+This is evidence that the main improvement comes from the fused speculative
+path, not from a host CPU requirement.
+
+A nonempty 117,109-token checkpoint restored after a clean server restart in
+1.54 seconds. The next request reported 117,042 cached tokens and 103.03
+decode TPS. The final restore-alignment build repeated the restored request at
+134.6 decode TPS without a speculative-batch failure. The current release check
+has 45 passing tests.
+
+The same cache also survived an actual Vast stop/start. SSH returned in 46
+seconds, the official resume path loaded the service in 16 seconds, and cache
+restore took 1.88 seconds. The first request after restore reused 117,042
+tokens and reached 108.58 TPS.

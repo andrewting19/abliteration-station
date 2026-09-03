@@ -10,12 +10,51 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from abliteration_station.errors import LifecycleError
+from abliteration_station.providers.base import Route
 from abliteration_station.providers.vast import VastProvider
 
 ROOT = Path(__file__).parents[1]
 
 
 class VastProviderTest(unittest.TestCase):
+    def test_cache_export_passes_selected_replace_mode(self) -> None:
+        provider = VastProvider(
+            {
+                "cache_command": "/bin/true",
+                "cache_replace_mode": "in-place-safe",
+            }
+        )
+        result = SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps({"sha256": {"archive": "a" * 64}}),
+            stderr="",
+        )
+        with patch.object(provider, "_run_cache_command", return_value=result) as run:
+            provider.export_cache(
+                Route("vast", "http://model.test", {"instance_id": "12345"}),
+                "pi-session.slot",
+                Path("/var/lib/cache"),
+            )
+        run.assert_called_once_with(
+            "cache-export",
+            "12345",
+            "pi-session.slot",
+            "/var/lib/cache",
+            "in-place-safe",
+        )
+
+    def test_cache_export_rejects_unknown_replace_mode(self) -> None:
+        provider = VastProvider(
+            {"cache_command": "/bin/true", "cache_replace_mode": "unsafe"}
+        )
+        with self.assertRaisesRegex(LifecycleError, "replace mode is invalid"):
+            provider.export_cache(
+                Route("vast", "http://model.test", {"instance_id": "12345"}),
+                "pi-session.slot",
+                Path("/var/lib/cache"),
+            )
+
     def test_fast_bootstrap_uses_verified_release_artifacts(self) -> None:
         manifest = (ROOT / "scripts" / "vast" / "portable-manifest.env").read_text(
             encoding="utf-8"
@@ -25,9 +64,19 @@ class VastProviderTest(unittest.TestCase):
         )
         self.assertIn("releases/download/bootstrap-artifacts-v1", manifest)
         self.assertIn(
-            "daa23afe7c2f9e56688548cd6dd48807dcb4ec81562503e0312e3bef8cf9def0",
+            "a306552e059c812dc9a0991b19be400e98b6f7c6174a8ad5921a91a837247955",
             manifest,
         )
+        self.assertIn("QWEN38_RUNTIME_PATCH_SHA256", manifest)
+        self.assertIn('export LD_LIBRARY_PATH="$SERVER_DIR', (ROOT / "scripts" / "vast" / "run-qwen38-cloud.sh").read_text(encoding="utf-8"))
+        self.assertIn('git -C "$LLAMA_DIR" apply', bootstrap)
+        self.assertIn('git -C "$LLAMA_DIR" write-tree', bootstrap)
+        self.assertIn("does not match the current manifest", bootstrap)
+        self.assertIn("QWEN38_TARGET_BYTES", manifest)
+        self.assertIn("complete_stable", bootstrap)
+        self.assertIn("stopped making progress", bootstrap)
+        self.assertIn("supervisorctl pid", bootstrap)
+        self.assertNotIn("if ! supervisorctl status", bootstrap)
         self.assertIn("${CUDA_VERSION:-} == 13.2*", bootstrap)
         self.assertLess(
             bootstrap.index("Using the verified cached RTX 5090 build"),
@@ -40,12 +89,37 @@ class VastProviderTest(unittest.TestCase):
         )
         self.assertIn("The portable Q4 draft download failed", bootstrap)
 
+    def test_installed_deploy_includes_checkpoint_patch(self) -> None:
+        installer = (ROOT / "scripts" / "install.sh").read_text(encoding="utf-8")
+        deploy = (ROOT / "scripts" / "vast" / "deploy-fresh-vast.sh").read_text(
+            encoding="utf-8"
+        )
+        bootstrap = (ROOT / "scripts" / "vast" / "bootstrap-fresh-vast.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"$vast_root/patches/llama-slot-checkpoints.patch"', installer)
+        self.assertIn('PATCH_FILE="$SCRIPT_DIR/patches/llama-slot-checkpoints.patch"', deploy)
+        self.assertIn('"$PATCH_FILE"', deploy)
+        self.assertIn('"$SCRIPT_DIR/slot-cache-control.sh"', deploy)
+        self.assertIn('/usr/local/bin/qwen38-slot-cache', bootstrap)
+
     def test_selector_accepts_32_gb_system_ram_hosts(self) -> None:
         script = (ROOT / "scripts" / "vast" / "qwen-vast").read_text(
             encoding="utf-8"
         )
         self.assertIn("cpu_ram>=32", script)
         self.assertNotIn("cpu_ram>=48", script)
+
+    def test_launcher_supports_target_only_and_backend_sampling(self) -> None:
+        launcher = (ROOT / "scripts" / "vast" / "run-qwen38-cloud.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("QWEN38_BACKEND_SAMPLING", launcher)
+        self.assertIn("--backend-sampling", launcher)
+        self.assertIn("QWEN38_DRAFT_BACKEND_SAMPLING", launcher)
+        self.assertIn("--no-spec-draft-backend-sampling", launcher)
+        self.assertIn('if [[ "$SPEC_TYPE" != "none" ]]', launcher)
+        self.assertIn("SPEC_MODEL_ARGS+=(--spec-type none)", launcher)
 
     def test_fresh_replacement_prefers_verified_workspace_copy(self) -> None:
         ensure = (ROOT / "scripts" / "vast" / "ensure.sh").read_text(encoding="utf-8")
