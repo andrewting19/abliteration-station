@@ -40,6 +40,8 @@ if (( AUTO_THREADS > 16 )); then
   AUTO_THREADS=16
 fi
 THREADS="${QWEN38_THREADS:-$AUTO_THREADS}"
+BATCH_SIZE="${QWEN38_BATCH_SIZE:-2048}"
+UBATCH_SIZE="${QWEN38_UBATCH_SIZE:-512}"
 PREWARM="${QWEN38_PREWARM:-1}"
 TEMPERATURE="${QWEN38_TEMPERATURE:-1.0}"
 CHAT_TEMPLATE="${QWEN38_CHAT_TEMPLATE:-}"
@@ -121,8 +123,8 @@ exec "$SERVER" \
   --port 17070 \
   --ctx-size "$CONTEXT_SIZE" \
   --parallel "$PARALLEL" \
-  --batch-size 2048 \
-  --ubatch-size 512 \
+  --batch-size "$BATCH_SIZE" \
+  --ubatch-size "$UBATCH_SIZE" \
   --cache-type-k "$CACHE_TYPE_K" \
   --cache-type-v "$CACHE_TYPE_V" \
   --flash-attn on \

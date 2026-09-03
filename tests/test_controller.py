@@ -105,6 +105,31 @@ class ControllerTest(unittest.TestCase):
                     controller.ensure()
             self.assertTrue(provider.stopped)
 
+    def test_restore_can_be_kept_off_the_wake_critical_path(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            key = root / "key"
+            key.write_text("test\n", encoding="utf-8")
+            config = {
+                "provider_order": ["vast"],
+                "route_file": str(root / "route.json"),
+                "ensure_lock_file": str(root / "ensure.lock"),
+                "inference_key_file": str(key),
+                "model": {"id": "qwen38-cloud", "context_size": 262144},
+                "kv_cache": {"enabled": True, "restore_on_wake": False},
+                "providers": {},
+            }
+            provider = FakeProvider(
+                "vast", Route("vast", "http://vast.test", {"id": 1})
+            )
+            controller = Controller(config)
+            with patch("abliteration_station.controller.make_provider", return_value=provider), \
+                 patch.object(controller, "model_gate"), \
+                 patch.object(controller, "chat_gate"), \
+                 patch.object(controller, "restore_cache") as restore:
+                controller.ensure()
+            restore.assert_not_called()
+
     def test_ready_active_route_avoids_new_provider(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

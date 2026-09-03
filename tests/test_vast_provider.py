@@ -356,6 +356,9 @@ class VastProviderTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn('PUBLIC_KEY_B64', entrypoint)
         self.assertIn('base64 -d', entrypoint)
+        self.assertIn('QWEN38_BATCH_SIZE=4096', (ROOT / "scripts" / "vast" / "runtime.env").read_text(encoding="utf-8"))
+        self.assertIn('QWEN38_UBATCH_SIZE=1024', (ROOT / "scripts" / "vast" / "runtime.env").read_text(encoding="utf-8"))
+        self.assertIn('autostart=false', (ROOT / "scripts" / "vast" / "tailscaled-qwen.conf").read_text(encoding="utf-8"))
 
     def test_bootstrap_uses_prebuilt_runtime_and_draft_cache(self) -> None:
         bootstrap = (

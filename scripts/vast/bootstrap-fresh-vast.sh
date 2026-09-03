@@ -313,7 +313,6 @@ fi
 
 supervisorctl reread
 supervisorctl update
-supervisorctl restart tailscaled-qwen || true
 supervisorctl restart qwen38-cloud
 
 for _ in $(seq 1 120); do
@@ -321,12 +320,12 @@ for _ in $(seq 1 120); do
     -H "Authorization: Bearer $(<"$QWEN38_ROOT/api_key")" \
     http://127.0.0.1:17070/health >/dev/null; then
     echo "Qwen3.8 service is healthy."
-    supervisorctl status qwen38-cloud tailscaled-qwen
+    supervisorctl status qwen38-cloud
     exit 0
   fi
   sleep 2
 done
 
-supervisorctl status qwen38-cloud tailscaled-qwen || true
+supervisorctl status qwen38-cloud || true
 tail -n 100 /var/log/portal/qwen38-cloud.err.log >&2 || true
 exit 1

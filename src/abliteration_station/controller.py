@@ -275,7 +275,9 @@ class Controller:
                 route = provider.ensure()
                 self.model_gate(route.upstream)
                 self.chat_gate(route.upstream)
-                self.restore_cache(route)
+                cache = self._cache_config()
+                if cache is not None and cache.get("restore_on_wake", True):
+                    self.restore_cache(route)
                 atomic_json(
                     self.route_file,
                     {
