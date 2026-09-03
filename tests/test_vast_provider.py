@@ -349,6 +349,7 @@ class VastProviderTest(unittest.TestCase):
         self.assertIn('-p 22:22 -e PUBLIC_KEY_B64=', script)
         self.assertNotIn('--disk 150 --ssh --direct', script)
         self.assertNotIn('--onstart "$SCRIPT_DIR/vast-onstart.sh"', script)
+        self.assertEqual(script.count('--raw --args ""'), 3)
 
         entrypoint = (
             ROOT / "images" / "runtime" / "entrypoint.sh"

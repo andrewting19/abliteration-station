@@ -486,7 +486,9 @@ rent_offer() {
     args+=(--bid_price "$cap")
   fi
   local created
-  created=$("$VASTAI" "${args[@]}" --raw)
+  # An empty --args selects Vast's direct args runtime. Without it, the CLI
+  # silently defaults to its generated SSH image and rebuilds our container.
+  created=$("$VASTAI" "${args[@]}" --raw --args "")
   jq --argjson offer_id "$offer_id" \
     '{success, new_contract, offer_id: $offer_id, error, status_code, msg}' <<<"$created"
   jq -e '.success == true and (.new_contract | type == "number")' >/dev/null <<<"$created"
@@ -580,7 +582,7 @@ rent_performance() {
     result=$("$VASTAI" create instance "$offer_id" \
       --image "$RUNTIME_IMAGE" \
       --disk 150 --env "$container_env" --cancel-unavail \
-      --label qwen38-q3 --raw 2>&1)
+      --label qwen38-q3 --raw --args "" 2>&1)
     rc=$?
     set -e
     if [[ $rc -eq 0 ]] && jq -e '.success == true and .new_contract' >/dev/null 2>&1 <<<"$result"; then
@@ -624,7 +626,7 @@ rent_balanced() {
     result=$("$VASTAI" create instance "$offer_id" \
       --image "$RUNTIME_IMAGE" \
       --disk 150 --env "$container_env" --cancel-unavail \
-      --label qwen38-q3 --raw 2>&1)
+      --label qwen38-q3 --raw --args "" 2>&1)
     rc=$?
     set -e
     if [[ $rc -eq 0 ]] && jq -e '.success == true and .new_contract' >/dev/null 2>&1 <<<"$result"; then
