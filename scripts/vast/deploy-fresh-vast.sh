@@ -31,9 +31,17 @@ progress() {
   "$PROGRESS_COMMAND" "$1" "$2" "$3" "$INSTANCE_ID"
 }
 
-SSH=(ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+CONTROL_DIR=$(mktemp -d /run/abliteration-station/ssh.XXXXXX)
+CONTROL_PATH="$CONTROL_DIR/control"
+close_control_connection() {
+  ssh -o ControlPath="$CONTROL_PATH" -O exit "root@$SSH_HOST" >/dev/null 2>&1 || true
+  rmdir "$CONTROL_DIR" >/dev/null 2>&1 || true
+}
+trap close_control_connection EXIT
+
+SSH=(ssh -o ControlMaster=auto -o ControlPersist=60 -o ControlPath="$CONTROL_PATH" -o StrictHostKeyChecking=accept-new \
   -i "$SSH_KEY" -p "$SSH_PORT" "root@$SSH_HOST")
-SCP=(scp -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+SCP=(scp -o ControlMaster=auto -o ControlPersist=60 -o ControlPath="$CONTROL_PATH" -o StrictHostKeyChecking=accept-new \
   -i "$SSH_KEY" -P "$SSH_PORT")
 
 "${SSH[@]}" "install -d -m 0755 '$REMOTE_STAGE' /workspace/qwen38"

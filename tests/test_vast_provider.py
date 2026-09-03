@@ -325,9 +325,14 @@ class VastProviderTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn(
-            "ghcr.io/andrewting19/abliteration-station-runtime:cuda13.2-v3",
+            "ghcr.io/andrewting19/abliteration-station-runtime:cuda13.2-v4",
             script,
         )
+        deploy = (
+            ROOT / "scripts" / "vast" / "deploy-fresh-vast.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn("ControlMaster=auto", deploy)
+        self.assertIn("ControlPersist=60", deploy)
         self.assertIn("image=$RUNTIME_IMAGE", script)
 
     def test_bootstrap_uses_prebuilt_runtime_and_draft_cache(self) -> None:

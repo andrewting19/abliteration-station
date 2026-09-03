@@ -16,7 +16,7 @@ RUN cd /usr/local/cuda-13.2/targets/x86_64-linux/lib \
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-      aria2 ca-certificates curl jq openssh-server openssl python3 supervisor zstd \
+      aria2 ca-certificates curl jq libgomp1 openssh-server openssl python3 supervisor zstd \
     && curl -fsSL https://tailscale.com/install.sh -o /tmp/install-tailscale.sh \
     && bash /tmp/install-tailscale.sh \
     && rm -rf /var/lib/apt/lists/* /tmp/install-tailscale.sh \

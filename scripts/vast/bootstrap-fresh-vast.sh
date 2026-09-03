@@ -49,15 +49,18 @@ fi
 
 build_matches_source() {
   local binary=$1
-  local binary_dir
+  local binary_dir validation_output
   [[ -x "$binary" ]] || return 1
   [[ -r "$BUILD_DIR/.qwen38-build-profile" ]] || return 1
   [[ $(<"$BUILD_DIR/.qwen38-build-profile") == "$BUILD_PROFILE" ]] || return 1
   [[ -r "$BUILD_DIR/.qwen38-source-tree" ]] || return 1
   [[ $(<"$BUILD_DIR/.qwen38-source-tree") == "$QWEN38_LLAMA_EXPECTED_TREE" ]] || return 1
   binary_dir=$(dirname -- "$binary")
-  LD_LIBRARY_PATH="$binary_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
-    "$binary" --version >/dev/null 2>&1
+  if ! validation_output=$(LD_LIBRARY_PATH="$binary_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+      "$binary" --version 2>&1); then
+    printf 'Cached runtime validation failed: %s\n' "$validation_output" >&2
+    return 1
+  fi
 }
 
 if [[ -s "$BUILD_CACHE" ]] &&
