@@ -210,6 +210,7 @@ class ControllerTest(unittest.TestCase):
                     "filename": "pi.slot",
                     "state_file": str(root / "state.json"),
                     "artifact_directory": str(root / "cache"),
+                    "portable_export_on_save": True,
                 },
                 "providers": {},
             }
@@ -222,6 +223,34 @@ class ControllerTest(unittest.TestCase):
             state = json.loads((root / "state.json").read_text(encoding="utf-8"))
             self.assertEqual(state["runtime"]["fingerprint"], "c" * 64)
             self.assertEqual(state["artifact"]["sha256"]["archive"], "d" * 64)
+
+    def test_provider_local_save_does_not_export_through_controller(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            key = root / "key"
+            key.write_text("test\n", encoding="utf-8")
+            config = {
+                "inference_key_file": str(key),
+                "model": {"id": "qwen38-cloud", "context_size": 262144},
+                "kv_cache": {
+                    "enabled": True,
+                    "filename": "pi.slot",
+                    "state_file": str(root / "state.json"),
+                    "portable_export_on_save": False,
+                },
+                "providers": {},
+            }
+            controller = Controller(config)
+            provider = FakeProvider("vast", None)
+            route = Route("vast", "http://vast.test", {"instance_id": "1"})
+            with patch("abliteration_station.controller.make_provider", return_value=provider), \
+                 patch.object(provider, "export_cache") as export, \
+                 patch.object(controller, "_request_json", return_value={"n_saved": 160000}):
+                self.assertTrue(controller.save_cache(route))
+            export.assert_not_called()
+            state = json.loads((root / "state.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["storage"], "provider-local")
+            self.assertNotIn("artifact", state)
 
     def test_empty_slot_save_does_not_replace_portable_artifact(self):
         with tempfile.TemporaryDirectory() as temp:

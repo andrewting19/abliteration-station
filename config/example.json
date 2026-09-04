@@ -13,6 +13,7 @@
     "state_file": "/var/lib/abliteration-station/kv-cache-state.json",
     "artifact_directory": "/var/lib/abliteration-station/kv-cache",
     "runtime_fingerprint": "qwen38-q3-262144-medium-v1",
+    "portable_export_on_save": false,
     "required_before_stop": true,
     "save_timeout_seconds": 900,
     "restore_timeout_seconds": 900

@@ -150,30 +150,36 @@ class Controller:
                 )
             provider = make_provider(route.provider, self.config)
             runtime_method = getattr(provider, "runtime_fingerprint", None)
-            export = getattr(provider, "export_cache", None)
             if not callable(runtime_method):
                 raise LifecycleError(f"provider {route.provider} cannot identify its live runtime")
-            if not callable(export):
-                raise LifecycleError(f"provider {route.provider} cannot export a portable cache")
             runtime = runtime_method(route)
-            artifact = export(route, filename, self._cache_artifact_directory())
+            export_portable = bool(cache.get("portable_export_on_save", False))
+            artifact = None
+            if export_portable:
+                export = getattr(provider, "export_cache", None)
+                if not callable(export):
+                    raise LifecycleError(f"provider {route.provider} cannot export a portable cache")
+                artifact = export(route, filename, self._cache_artifact_directory())
+            state = {
+                "schema_version": 1,
+                "fingerprint": self._cache_fingerprint(),
+                "runtime": runtime,
+                "provider": route.provider,
+                "identity": route.identity,
+                "filename": filename,
+                "storage": "portable" if artifact is not None else "provider-local",
+                "saved_unix_ms": int(time.time() * 1000),
+                "server_response": {
+                    key: response[key]
+                    for key in ("filename", "n_saved", "n_written", "timings")
+                    if key in response
+                },
+            }
+            if artifact is not None:
+                state["artifact"] = artifact
             atomic_json(
                 self._cache_state_file(),
-                {
-                    "schema_version": 1,
-                    "fingerprint": self._cache_fingerprint(),
-                    "runtime": runtime,
-                    "provider": route.provider,
-                    "identity": route.identity,
-                    "filename": filename,
-                    "saved_unix_ms": int(time.time() * 1000),
-                    "artifact": artifact,
-                    "server_response": {
-                        key: response[key]
-                        for key in ("filename", "n_saved", "n_written", "timings")
-                        if key in response
-                    },
-                },
+                state,
             )
             return True
         except (LifecycleError, OSError, TypeError, ValueError) as error:

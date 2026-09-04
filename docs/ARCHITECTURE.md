@@ -60,9 +60,17 @@ until the transfer path has a successful acceptance record.
 ## Idle stop
 
 The proxy records active requests and response activity. It does not stop the
-provider during a request. After ten idle minutes, it sends a stop request to
-Vast and removes the active route. The next inference request starts the route
-again and then continues automatically.
+provider during a request. Before an idle stop, the controller saves the active
+slot on the retained GPU disk. It does not copy the multi-gigabyte checkpoint
+through the Pi server by default. After ten idle minutes, it sends a stop
+request to Vast and removes the active route. The next inference request starts
+the same instance, validates the runtime identity, restores the local slot, and
+then continues automatically.
+
+If Vast cannot return the same instance, a provider-local checkpoint is not
+used on the replacement host. The request safely uses a full prefill. Operators
+can set `kv_cache.portable_export_on_save` to `true` to keep a cross-host copy,
+but that transfer remains on the stop and wake cost path.
 
 ## Provider contract
 
