@@ -97,11 +97,12 @@ wait_ssh() {
   local instance_id=$1
   local poll_seconds=${QWEN38_SSH_POLL_SECONDS:-1}
   local stopped_start_grace_seconds=${QWEN38_STOPPED_START_GRACE_SECONDS:-45}
-  local fresh_host_grace_seconds=${QWEN38_FRESH_HOST_GRACE_SECONDS:-300}
+  local fresh_host_stall_seconds=${QWEN38_FRESH_HOST_STALL_SECONDS:-180}
+  local fresh_host_max_seconds=${QWEN38_FRESH_HOST_MAX_SECONDS:-900}
   local retained_start=${QWEN38_RETAINED_START:-0}
   local deadline=$((SECONDS + 900))
   local retained_deadline=$((SECONDS + stopped_start_grace_seconds))
-  local fresh_host_deadline=$((SECONDS + fresh_host_grace_seconds))
+  local fresh_host_started=$SECONDS fresh_host_last_progress=$SECONDS
   local instance_json host port actual_status intended_status status_message
   local running_since=0 stopped_since=0 last_progress=""
   while (( SECONDS < deadline )); do
@@ -118,18 +119,24 @@ wait_ssh() {
       if [[ "loading:$status_message" != "$last_progress" ]]; then
         progress provider_image "$status_message" 180 "$instance_id"
         last_progress="loading:$status_message"
+        fresh_host_last_progress=$SECONDS
       fi
     elif [[ "$actual_status" == running && "$last_progress" != running ]]; then
       progress provider_ssh "The container is running; waiting for private SSH" 30 "$instance_id"
       last_progress=running
+      fresh_host_last_progress=$SECONDS
     fi
     if [[ "$retained_start" == 1 && "$actual_status" != running ]] &&
        (( SECONDS >= retained_deadline )); then
       die "Vast did not return the retained GPU within ${stopped_start_grace_seconds} seconds"
     fi
     if [[ "$retained_start" != 1 && "$actual_status" != running ]] &&
-       (( SECONDS >= fresh_host_deadline )); then
-      die "Vast did not expose the fresh container within ${fresh_host_grace_seconds} seconds"
+       (( SECONDS - fresh_host_last_progress >= fresh_host_stall_seconds )); then
+      die "Vast made no fresh-container progress for ${fresh_host_stall_seconds} seconds"
+    fi
+    if [[ "$retained_start" != 1 && "$actual_status" != running ]] &&
+       (( SECONDS - fresh_host_started >= fresh_host_max_seconds )); then
+      die "Vast did not expose the fresh container within ${fresh_host_max_seconds} seconds"
     fi
     if jq -e '
       (.status_msg // "") |
