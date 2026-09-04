@@ -75,7 +75,7 @@ COPY --from=model-sharder /model/Qwen3.8-27B-Unleashed-UD-Q3_K_XL-00003-of-00004
 COPY --from=model-sharder /model/Qwen3.8-27B-Unleashed-UD-Q3_K_XL-00004-of-00004.gguf /opt/abliteration-station/cache/models/
 COPY --from=model-sharder /model/Qwen3.8-27B-DFlash2-Q4_0.gguf /opt/abliteration-station/cache/
 
-COPY images/runtime/entrypoint.sh /usr/local/bin/abliteration-station-container-entrypoint
+COPY scripts/vast/container-entrypoint.sh /usr/local/bin/abliteration-station-container-entrypoint
 RUN chmod 0755 /usr/local/bin/abliteration-station-container-entrypoint
 
 EXPOSE 22

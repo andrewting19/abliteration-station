@@ -16,6 +16,7 @@ class VastProvider:
     """Adapter for the Vast.ai lifecycle scripts."""
 
     name = "vast"
+    validates_model_on_ensure = True
 
     def __init__(self, config: dict[str, Any]):
         self.config = config

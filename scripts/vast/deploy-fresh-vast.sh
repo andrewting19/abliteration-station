@@ -53,6 +53,7 @@ progress runtime_assets "Sending the verified runtime assets" 45
   "$SCRIPT_DIR/run-qwen38-cloud.sh" \
   "$SCRIPT_DIR/slot-cache-control.sh" \
   "$SCRIPT_DIR/run-tailscaled.sh" \
+  "$SCRIPT_DIR/container-entrypoint.sh" \
   "$SCRIPT_DIR/qwen38-cloud.conf" \
   "$SCRIPT_DIR/tailscaled-qwen.conf" \
   "$SCRIPT_DIR/runtime.env" \

@@ -320,6 +320,7 @@ for required in \
   "$SCRIPT_DIR/run-qwen38-cloud.sh" \
   "$SCRIPT_DIR/slot-cache-control.sh" \
   "$SCRIPT_DIR/run-tailscaled.sh" \
+  "$SCRIPT_DIR/container-entrypoint.sh" \
   "$SCRIPT_DIR/qwen38-cloud.conf" \
   "$SCRIPT_DIR/tailscaled-qwen.conf" \
   "$SCRIPT_DIR/runtime.env"; do
@@ -330,6 +331,8 @@ install -d -m 0755 /opt/supervisor-scripts /var/log/portal
 install -m 0755 "$SCRIPT_DIR/run-qwen38-cloud.sh" /opt/supervisor-scripts/run-qwen38-cloud.sh
 install -m 0755 "$SCRIPT_DIR/slot-cache-control.sh" /usr/local/bin/qwen38-slot-cache
 install -m 0755 "$SCRIPT_DIR/run-tailscaled.sh" /opt/supervisor-scripts/run-tailscaled.sh
+install -m 0755 "$SCRIPT_DIR/container-entrypoint.sh" \
+  /usr/local/bin/abliteration-station-container-entrypoint
 install -m 0644 "$SCRIPT_DIR/qwen38-cloud.conf" /etc/supervisor/conf.d/qwen38-cloud.conf
 install -m 0644 "$SCRIPT_DIR/tailscaled-qwen.conf" /etc/supervisor/conf.d/tailscaled-qwen.conf
 install -m 0600 "$SCRIPT_DIR/runtime.env" "$QWEN38_ROOT/runtime.env"

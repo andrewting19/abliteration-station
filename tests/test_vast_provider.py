@@ -110,6 +110,21 @@ class VastProviderTest(unittest.TestCase):
         self.assertIn('"$SCRIPT_DIR/slot-cache-control.sh"', deploy)
         self.assertIn('/usr/local/bin/qwen38-slot-cache', bootstrap)
 
+    def test_retained_container_autostarts_model_before_ssh(self) -> None:
+        deploy = (ROOT / "scripts" / "vast" / "deploy-fresh-vast.sh").read_text(
+            encoding="utf-8"
+        )
+        bootstrap = (ROOT / "scripts" / "vast" / "bootstrap-fresh-vast.sh").read_text(
+            encoding="utf-8"
+        )
+        entrypoint = (ROOT / "scripts" / "vast" / "container-entrypoint.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"$SCRIPT_DIR/container-entrypoint.sh"', deploy)
+        self.assertIn("abliteration-station-container-entrypoint", bootstrap)
+        self.assertIn("supervisord -c /etc/supervisor/supervisord.conf", entrypoint)
+        self.assertIn("supervisorctl start tailscaled-qwen", entrypoint)
+
     def test_selector_accepts_32_gb_system_ram_hosts(self) -> None:
         script = (ROOT / "scripts" / "vast" / "qwen-vast").read_text(
             encoding="utf-8"
@@ -354,7 +369,7 @@ class VastProviderTest(unittest.TestCase):
         self.assertEqual(script.count('--raw --args ""'), 3)
 
         entrypoint = (
-            ROOT / "images" / "runtime" / "entrypoint.sh"
+            ROOT / "scripts" / "vast" / "container-entrypoint.sh"
         ).read_text(encoding="utf-8")
         self.assertIn('PUBLIC_KEY_B64', entrypoint)
         self.assertIn('base64 -d', entrypoint)

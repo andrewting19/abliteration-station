@@ -176,6 +176,27 @@ class ControllerTest(unittest.TestCase):
             self.assertEqual(route.provider, "second")
             self.assertTrue(providers["vast"].stopped)
 
+    def test_provider_certified_wake_does_not_repeat_model_gates(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            provider = FakeProvider(
+                "vast", Route("vast", "http://vast.test", {"instance_id": "1"})
+            )
+            provider.validates_model_on_ensure = True
+            controller = Controller({
+                "provider_order": ["vast"],
+                "route_file": str(root / "route.json"),
+                "ensure_lock_file": str(root / "ensure.lock"),
+                "model": {"id": "qwen38-cloud", "context_size": 262144},
+                "providers": {},
+            })
+            with patch("abliteration_station.controller.make_provider", return_value=provider), \
+                 patch.object(controller, "model_gate") as model_gate, \
+                 patch.object(controller, "chat_gate") as chat_gate:
+                controller.ensure()
+            model_gate.assert_not_called()
+            chat_gate.assert_not_called()
+
     def test_stop_removes_route_after_provider_stops(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -338,6 +359,42 @@ class ControllerTest(unittest.TestCase):
             self.assertFalse(restored)
             import_cache.assert_not_called()
             request.assert_not_called()
+
+    def test_same_instance_restore_uses_saved_runtime_identity(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            key = root / "key"
+            key.write_text("test\n", encoding="utf-8")
+            state = root / "state.json"
+            controller = Controller({
+                "inference_key_file": str(key),
+                "model": {"id": "qwen38-cloud", "context_size": 262144},
+                "kv_cache": {
+                    "enabled": True,
+                    "filename": "pi.slot",
+                    "state_file": str(state),
+                },
+            })
+            identity = {"instance_id": "same"}
+            state.write_text(json.dumps({
+                "fingerprint": controller._cache_fingerprint(),
+                "filename": "pi.slot",
+                "provider": "vast",
+                "identity": identity,
+                "runtime": {"fingerprint": "saved"},
+                "storage": "provider-local",
+            }) + "\n", encoding="utf-8")
+            provider = FakeProvider("vast", None)
+            with patch("abliteration_station.controller.make_provider", return_value=provider), \
+                 patch.object(provider, "runtime_fingerprint") as runtime_fingerprint, \
+                 patch.object(provider, "import_cache") as import_cache, \
+                 patch.object(controller, "_request_json", return_value={}):
+                restored = controller.restore_cache(
+                    Route("vast", "http://vast.test", identity)
+                )
+            self.assertTrue(restored)
+            runtime_fingerprint.assert_not_called()
+            import_cache.assert_not_called()
 
     def test_required_cache_failure_cancels_provider_stop(self):
         with tempfile.TemporaryDirectory() as temp:

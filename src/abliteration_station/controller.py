@@ -195,14 +195,18 @@ class Controller:
             if state.get("fingerprint") != self._cache_fingerprint():
                 raise LifecycleError("checkpoint fingerprint does not match this model runtime")
             provider = make_provider(route.provider, self.config)
-            runtime_method = getattr(provider, "runtime_fingerprint", None)
-            if not callable(runtime_method):
-                raise LifecycleError(f"provider {route.provider} cannot identify its live runtime")
-            saved_runtime = state.get("runtime")
-            live_runtime = runtime_method(route)
-            if not isinstance(saved_runtime, dict) or saved_runtime.get("fingerprint") != live_runtime.get("fingerprint"):
-                raise LifecycleError("checkpoint live-runtime fingerprint does not match this host")
-            if state.get("identity") != route.identity:
+            same_instance = (
+                state.get("provider") == route.provider
+                and state.get("identity") == route.identity
+            )
+            if not same_instance:
+                runtime_method = getattr(provider, "runtime_fingerprint", None)
+                if not callable(runtime_method):
+                    raise LifecycleError(f"provider {route.provider} cannot identify its live runtime")
+                saved_runtime = state.get("runtime")
+                live_runtime = runtime_method(route)
+                if not isinstance(saved_runtime, dict) or saved_runtime.get("fingerprint") != live_runtime.get("fingerprint"):
+                    raise LifecycleError("checkpoint live-runtime fingerprint does not match this host")
                 import_cache = getattr(provider, "import_cache", None)
                 if not callable(import_cache):
                     raise LifecycleError(f"provider {route.provider} cannot import a portable cache")
@@ -279,8 +283,9 @@ class Controller:
             provider = make_provider(name, self.config)
             try:
                 route = provider.ensure()
-                self.model_gate(route.upstream)
-                self.chat_gate(route.upstream)
+                if not bool(getattr(provider, "validates_model_on_ensure", False)):
+                    self.model_gate(route.upstream)
+                    self.chat_gate(route.upstream)
                 cache = self._cache_config()
                 if cache is not None and cache.get("restore_on_wake", True):
                     self.restore_cache(route)
