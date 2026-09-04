@@ -197,6 +197,29 @@ class ControllerTest(unittest.TestCase):
             model_gate.assert_not_called()
             chat_gate.assert_not_called()
 
+    def test_cache_restore_progress_precedes_ready_progress(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            provider = FakeProvider(
+                "vast", Route("vast", "http://vast.test", {"instance_id": "1"})
+            )
+            provider.validates_model_on_ensure = True
+            controller = Controller({
+                "provider_order": ["vast"],
+                "route_file": str(root / "route.json"),
+                "progress_file": str(root / "progress.json"),
+                "ensure_lock_file": str(root / "ensure.lock"),
+                "model": {"id": "qwen38-cloud", "context_size": 262144},
+                "kv_cache": {"enabled": True, "restore_on_wake": True},
+                "providers": {},
+            })
+            phases = []
+            with patch("abliteration_station.controller.make_provider", return_value=provider), \
+                 patch.object(controller, "restore_cache", return_value=True), \
+                 patch.object(controller, "_progress", side_effect=lambda phase, *_: phases.append(phase)):
+                controller.ensure()
+            self.assertEqual(phases, ["cache_restore", "ready"])
+
     def test_stop_removes_route_after_provider_stops(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

@@ -43,6 +43,21 @@ class Controller:
         self.config = config
         self.route_file = Path(config.get("route_file", "/run/abliteration-station/route.json"))
 
+    def _progress(self, phase: str, message: str, eta_seconds: int | None) -> None:
+        progress_file = Path(
+            self.config.get("progress_file", self.route_file.parent / "progress.json")
+        )
+        atomic_json(
+            progress_file,
+            {
+                "phase": phase,
+                "message": message,
+                "phase_started_unix_ms": int(time.time() * 1000),
+                "eta_seconds": eta_seconds,
+                "instance_id": None,
+            },
+        )
+
     def _active_route(self) -> Route | None:
         if not self.route_file.is_file():
             return None
@@ -288,6 +303,11 @@ class Controller:
                     self.chat_gate(route.upstream)
                 cache = self._cache_config()
                 if cache is not None and cache.get("restore_on_wake", True):
+                    self._progress(
+                        "cache_restore",
+                        "Restoring the retained context cache",
+                        5,
+                    )
                     self.restore_cache(route)
                 atomic_json(
                     self.route_file,
@@ -298,6 +318,7 @@ class Controller:
                         "ready_unix_ms": int(time.time() * 1000),
                     },
                 )
+                self._progress("ready", "The private Qwen server is ready", 0)
                 return route
             except ProviderUnavailable as error:
                 failures.append(f"{name}: unavailable: {error}")
