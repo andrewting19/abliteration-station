@@ -58,3 +58,21 @@ The measured result was 177.15 seconds to the first token, 1,492 prompt TPS,
 and 74.4 decode TPS. The selected Vast machine already had the pinned runtime
 image in its host image cache. This result does not claim that the first image
 pull on an arbitrary host finishes in less than three minutes.
+
+## Retained-instance warm start
+
+- [x] Keep the KV checkpoint on the retained provider disk instead of copying
+  it through Kevin.
+- [x] Save more than 145,000 tokens before the idle stop.
+- [x] Restore 145,207 cached tokens after two independent stop/start cycles.
+- [x] Start model loading and Tailscale before SSH becomes available.
+- [x] Avoid duplicate model gates and runtime hashing for the same retained
+  instance.
+- [x] Produce the same output SHA-256 as the cold-prefill control.
+- [x] Measure first-token latency below 30 seconds twice: 21.36 and 20.20
+  seconds.
+- [x] Keep decode performance above 75 TPS: 77.56 and 77.49 TPS.
+
+The warm result applies to a retained stopped instance with its provider disk.
+It does not apply after Vast destroys the instance or moves the request to a
+different host.

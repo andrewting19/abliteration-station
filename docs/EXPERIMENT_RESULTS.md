@@ -167,3 +167,30 @@ results were:
 - `n_max=8`: 114.1 TPS
 
 Keep `n_max=6`. It was the fastest value in this bounded sweep.
+
+## 2026-09-04: retained-instance warm start and provider-local KV cache
+
+The test used one retained RTX 5090 instance and the captured real Pi request
+with 145,211 prompt tokens. The output was limited to 64 tokens so that the
+test measured startup latency. All variants produced the same output SHA-256
+and passed the quality gate.
+
+| Variant | First token | Cache reuse | Decode TPS |
+|---|---:|---:|---:|
+| Retained instance, cold prefill | 152.65 s | 0 | 80.89 |
+| Provider-local KV restore, sequential startup | 51.10 s | 145,207 | 78.53 |
+| Provider-local KV restore, entrypoint autostart, run 1 | 21.36 s | 145,207 | 77.56 |
+| Provider-local KV restore, entrypoint autostart, run 2 | 20.20 s | 145,207 | 77.49 |
+
+The provider-local checkpoint was 2,838,652,556 bytes. The latest server save
+took 742 ms. The complete save and stop command took 6.3 seconds. The cache
+does not pass through Kevin during a retained-instance wake. The container
+entrypoint starts the model and Tailscale while Vast prepares SSH. The
+controller also does not repeat model gates or a runtime hash after the Vast
+adapter validates the same exact retained instance.
+
+The controlled result shows that KV restore saves 101.55 seconds compared to
+a cold prefill on the same retained instance. Entrypoint autostart then removes
+about 30 seconds from the earlier sequential restore path. Replacement hosts
+still require runtime identity validation and a portable cache transfer or a
+cold prefill.
