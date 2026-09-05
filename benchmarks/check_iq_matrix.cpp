@@ -4,6 +4,7 @@
 #include <vector>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 
 int main() {
     ggml_backend_load_all();
@@ -31,11 +32,17 @@ int main() {
             ggml_backend_tensor_set(b,y.data(),0,y.size()*sizeof(float));
             if (ggml_backend_graph_compute(backend,graph)!=GGML_STATUS_SUCCESS) return 4;
             ggml_backend_tensor_get(result,out.data(),0,out.size()*sizeof(float));
+            std::vector<unsigned char> qcheck(q.size());
+            std::vector<float> ycheck(y.size());
+            ggml_backend_tensor_get(a,qcheck.data(),0,qcheck.size());
+            ggml_backend_tensor_get(b,ycheck.data(),0,ycheck.size()*sizeof(float));
+            if (q != qcheck || std::memcmp(y.data(),ycheck.data(),y.size()*sizeof(float))) return 5;
             double error=0, energy=0;
             for (int col=0;col<n;++col) for (int row=0;row<m;++row) {
                 double expected=0;
                 for(int j=0;j<k;++j) expected+=double(dx[row*k+j])*y[col*k+j];
                 double diff=expected-out[col*m+row]; error+=diff*diff; energy+=expected*expected;
+                if (col==0 && row<4) std::printf("sample backend=%s type=%s row=%d expected=%.8f actual=%.8f\n",name,ggml_type_name(type),row,expected,out[col*m+row]);
             }
             double nmse=error/energy;
             std::printf("backend=%s type=%s nmse=%.9g\n",name,ggml_type_name(type),nmse);

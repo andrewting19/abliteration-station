@@ -14,6 +14,9 @@ echo "$QWEN38_RUNTIME_PATCH_SHA256  $project/patches/llama-slot-checkpoints.patc
 git -C "$source_dir/source" apply "$project/patches/llama-slot-checkpoints.patch"
 git -C "$source_dir/source" add tools/server/server-context.cpp
 [[ "$(git -C "$source_dir/source" write-tree)" == "$QWEN38_LLAMA_EXPECTED_TREE" ]]
+git -C "$source_dir/source" apply "$project/patches/experimental-iq-index-shifts.patch"
+git -C "$source_dir/source" add ggml/src/ggml-cuda/vecdotq.cuh ggml/src/ggml-cuda/mmq-load-tiles.cuh
+fixed_baseline_tree=$(git -C "$source_dir/source" write-tree)
 build="$source_dir/build"
 # Resolve the driver SONAME at link time on a runner without a GPU driver.
 # This directory is not packaged or placed on the runtime library path.
@@ -40,9 +43,11 @@ cp -a "$build/bin/"libggml-cuda.so* "$output/candidate/"
 cp "$source_dir/source/LICENSE" "$output/llama-LICENSE"
 {
   printf 'base_commit=%s\nbaseline_tree=%s\ncandidate_tree=%s\n' \
-    "$QWEN38_LLAMA_BASE_COMMIT" "$QWEN38_LLAMA_EXPECTED_TREE" "$candidate_tree"
+    "$QWEN38_LLAMA_BASE_COMMIT" "$fixed_baseline_tree" "$candidate_tree"
+  printf 'original_tree=%s\n' "$QWEN38_LLAMA_EXPECTED_TREE"
   printf 'architecture=120a\nparallel_compile_jobs=2\n'
   sha256sum "$project/patches/experimental-iq-mmq.patch"
+  sha256sum "$project/patches/experimental-iq-index-shifts.patch"
   nvcc --version
 } > "$output/BUILD_INFO.txt"
 (cd "$output" && sha256sum baseline/libggml-cuda.so.* candidate/libggml-cuda.so.* > SHA256SUMS)
