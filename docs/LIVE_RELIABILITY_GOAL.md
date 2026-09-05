@@ -1,5 +1,15 @@
 # Live Pi reliability and speed goal
 
+## Current funding blocker (2026-09-05 16:20 UTC)
+
+Vast reports balance -0.037874 USD, credit zero, and credit-only billing.
+Test instance 49977258 changed to exited/stopped before the smaller-tile replay
+connected. The cleanup service had not run, and the production proxy had no
+matching stop event. The controller summary is empty and is not a valid result.
+No paid restart or rental should be attempted until funds are available.
+The existing cleanup timer remains set for 16:54:37 UTC. Production instance
+49928587 is also stopped. No performance or full-lifecycle completion is claimed.
+
 Started 2026-09-05 UTC. Status: active, not accepted.
 
 ## Acceptance
