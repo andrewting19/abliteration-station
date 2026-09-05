@@ -10,7 +10,8 @@ git clone --filter=blob:none --no-checkout https://github.com/ggml-org/llama.cpp
 git -C "$task_dir/source" checkout --detach "$QWEN38_LLAMA_BASE_COMMIT"
 git -C "$task_dir/source" apply "$project/patches/experimental-q4-mma-tile.patch"
 nvcc -O3 -lineinfo --use_fast_math --extended-lambda -std=c++17 \
-  -arch=sm_120a -DGGML_CUDA_USE_GRAPHS -Xcompiler -fPIC -shared \
+  -arch=sm_120a -DGGML_CUDA_USE_GRAPHS --cudart shared \
+  -Xcompiler -fPIC,-fvisibility=hidden,-fvisibility-inlines-hidden -shared \
   -I"$task_dir/source/ggml/include" -I"$task_dir/source/ggml/src" \
   -I"$project/benchmarks" "$project/benchmarks/q4_mma_tile_probe.cu" \
   -o "$output/q4-mma-tile-probe.so"

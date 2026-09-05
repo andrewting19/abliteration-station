@@ -8,7 +8,7 @@
 #include "ggml-cuda/fattn-mma-f16.cuh"
 template void qwen_experimental_q4_mma_case<256,256,8,8>(ggml_backend_cuda_context &,ggml_tensor *);
 
-extern "C" void qwen_q4_mma_tile_probe(ggml_backend_cuda_context * ctx, ggml_tensor * dst) {
+extern "C" __attribute__((visibility("default"))) void qwen_q4_mma_tile_probe(ggml_backend_cuda_context * ctx, ggml_tensor * dst) {
     GGML_ASSERT(dst->src[0]->ne[0] == 256);
     GGML_ASSERT(dst->src[1]->ne[0] == 256 && dst->src[2]->ne[0] == 256);
     GGML_ASSERT(dst->src[1]->type == GGML_TYPE_Q4_0 && dst->src[2]->type == GGML_TYPE_Q4_0);
@@ -16,7 +16,7 @@ extern "C" void qwen_q4_mma_tile_probe(ggml_backend_cuda_context * ctx, ggml_ten
     qwen_experimental_q4_mma_case<256,256,8,8>(*ctx,dst);
 }
 
-void ggml_cuda_flash_attn_ext(ggml_backend_cuda_context & ctx, ggml_tensor * dst) {
+__attribute__((visibility("default"))) void ggml_cuda_flash_attn_ext(ggml_backend_cuda_context & ctx, ggml_tensor * dst) {
     const auto * q=dst->src[0];
     const auto * k=dst->src[1];
     const auto * v=dst->src[2];
