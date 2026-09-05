@@ -27,6 +27,19 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Select image tags
+        id: image_tags
+        run: |
+          {
+            echo 'tags<<IMAGE_TAGS'
+            if [[ "$GITHUB_REF" == refs/heads/main ]]; then
+              echo ghcr.io/andrewting19/abliteration-station-runtime:cuda13.2-v6
+              echo ghcr.io/andrewting19/abliteration-station-runtime:latest
+            else
+              echo "ghcr.io/andrewting19/abliteration-station-runtime:candidate-${GITHUB_SHA}"
+            fi
+            echo IMAGE_TAGS
+          } >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -35,6 +48,4 @@ jobs:
           push: true
           provenance: false
           sbom: false
-          tags: |
-            ghcr.io/andrewting19/abliteration-station-runtime:cuda13.2-v6
-            ghcr.io/andrewting19/abliteration-station-runtime:latest
+          tags: ${{ steps.image_tags.outputs.tags }}
