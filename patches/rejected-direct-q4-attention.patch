@@ -1,0 +1,15 @@
+diff --git a/ggml/src/ggml-cuda/fattn.cu b/ggml/src/ggml-cuda/fattn.cu
+index ae217fbd9..e59418492 100644
+--- a/ggml/src/ggml-cuda/fattn.cu
++++ b/ggml/src/ggml-cuda/fattn.cu
+@@ -599,7 +599,9 @@ static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(const int device, const
+                 }
+             } else {
+                 if (cc >= GGML_CUDA_CC_ADA_LOVELACE) {
+-                    if (Q->ne[1] <= 2) {
++                    if (Q->ne[1] <= 2 ||
++                        (cc == GGML_CUDA_CC_BLACKWELL && Q->ne[0] == 256 &&
++                         K->type == GGML_TYPE_Q4_0 && V->type == GGML_TYPE_Q4_0 && Q->ne[1] <= 8)) {
+                         return BEST_FATTN_KERNEL_VEC;
+                     }
+                 } else {

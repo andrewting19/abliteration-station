@@ -336,3 +336,25 @@ up to two tokens on this GPU, then selects FP16 matrix attention. Test direct
 Q4 vector attention for the seven-token verification batch as a separate
 candidate. Numerical and real-request gates remain required. Production is
 unchanged.
+
+## Rejected attention and cache experiments, 2026-09-05
+
+Direct Q4 vector attention for Blackwell head-width 256 and query batches 3-8
+passed 12 numerical cases at cache lengths 1024 and 16384, then six cases at
+200704. The four initial batch-32/64 tests did not cover the changed path and
+were not used as acceptance. The real 201715-token replay decoded 2597 tokens
+at 31.03 TPS, substantially below the 66.33 TPS fixed baseline. This candidate
+is rejected. The patch is retained only as a rejected experiment, not installed.
+
+Q8 target K/V cache at the full 262144 capacity started successfully. A prefill
+sample used 27980 MiB VRAM. This is a sample, not a proven peak or a full-capacity
+stress test. The 201715-token request decoded 2267 tokens at 60.35 TPS and
+finished with an edit tool call. It did not improve this workload. The target
+weights and draft precision were unchanged; output differences prevent an
+equal-output comparison. Q4 cache remains the production setting.
+
+Results and the GPU trace are saved privately on Kevin. Test instance 49964346
+was deleted after result-file checks, and absence was verified. Production was
+not changed. Further work must address the measured GPU costs without assuming
+that removing one conversion kernel makes the replacement attention path faster.
+The 80 TPS, fresh-start, and full live Pi cycle requirements remain incomplete.
