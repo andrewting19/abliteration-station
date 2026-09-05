@@ -76,7 +76,7 @@ index 126a4c452..ae707b3a5 100644
                  if (use_cp_async) {
                      cp_async_wait_all();
                  }
-@@ -2063,7 +2084,11 @@ void ggml_cuda_flash_attn_ext_mma_f16_case(ggml_backend_cuda_context & ctx, ggml
+@@ -2063,6 +2084,10 @@ void ggml_cuda_flash_attn_ext_mma_f16_case(ggml_backend_cuda_context & ctx, ggml
      }
  
      launch_fattn<DV, ncols1, ncols2>
