@@ -390,13 +390,21 @@ class VastProviderTest(unittest.TestCase):
             root = Path(temp)
             fake = root / "vast"
             started = root / "started"
-            for price, expected in ((0.4, True), (0.8, False), (None, False)):
-                with self.subTest(price=price):
+            for price, actual, intended, expected, should_start in (
+                (0.4, 'exited', 'stopped', True, True),
+                (0.8, 'exited', 'stopped', False, False),
+                (None, 'exited', 'stopped', False, False),
+                (0.4, 'running', 'stopped', True, True),
+                (0.4, 'running', 'running', True, False),
+                (0.4, 'loading', 'stopped', True, True),
+                (0.4, 'loading', 'running', True, False),
+            ):
+                with self.subTest(price=price, actual=actual, intended=intended):
                     if started.exists():
                         started.unlink()
                     fake.write_text(
                         "#!/usr/bin/env python3\nimport json,sys\n"
-                        f"value={{'id': 123, 'actual_status': 'exited', 'dph_total': {price!r}}}\n"
+                        f"value={{'id': 123, 'actual_status': {actual!r}, 'intended_status': {intended!r}, 'dph_total': {price!r}}}\n"
                         "if sys.argv[1]=='show': print(json.dumps(value))\n"
                         f"else: open({str(started)!r}, 'w').write('started'); print('{{}}')\n",
                         encoding="utf-8")
@@ -407,7 +415,7 @@ class VastProviderTest(unittest.TestCase):
                         + function + "\nresume_existing 123\n")
                     result = subprocess.run(["bash", "-c", program], capture_output=True, text=True)
                     self.assertEqual(result.returncode == 0, expected, result.stderr)
-                    self.assertEqual(started.exists(), expected)
+                    self.assertEqual(started.exists(), should_start)
 
     def test_failed_bootstrap_offer_is_excluded_across_pi_retries(self) -> None:
         script = (ROOT / "scripts" / "vast" / "ensure.sh").read_text(encoding="utf-8")

@@ -98,12 +98,13 @@ fi
 
 resume_existing() {
   local instance_id=$1
-  local instance_json actual_status start_result
+  local instance_json actual_status intended_status start_result
   instance_json=$($VASTAI show instance "$instance_id" --raw 2>/dev/null) || return 1
   jq -e --argjson instance_id "$instance_id" '
     .error != true and ((.id // .contract_id) == $instance_id)
   ' >/dev/null 2>&1 <<<"$instance_json" || return 1
   actual_status=$(jq -r '.actual_status // empty' <<<"$instance_json")
+  intended_status=$(jq -r '.intended_status // empty' <<<"$instance_json")
 
   if ! jq -e --argjson cap "$PRICE_CAP" '
       .dph_total as $price |
@@ -114,8 +115,8 @@ resume_existing() {
     return 1
   fi
 
-  case "$actual_status" in
-    running|loading) ;;
+  case "$actual_status:$intended_status" in
+    running:running|loading:running) ;;
     *)
       echo "Starting retained Vast instance $instance_id..." >&2
       "$PROGRESS_COMMAND" retained_start "Requesting the retained Vast GPU" 55 "$instance_id"
