@@ -1,8 +1,14 @@
 """Check the prototype's address contract, not GPU numerical correctness."""
 import unittest
+import subprocess
+from pathlib import Path
 
 
 class TileAddressTest(unittest.TestCase):
+    def test_prototype_patch_parses(self):
+        root=Path(__file__).resolve().parents[1]
+        subprocess.run(["git","apply","--numstat",str(root/"patches/experimental-q4-mma-tile.patch")],check=True,capture_output=True)
+
     def test_adjacent_half_pairs_stay_in_one_quant_block(self):
         for offset in (0, 32, 64, 128):
             for column in range((256-offset)//2):
