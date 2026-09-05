@@ -29,10 +29,11 @@ def free_port() -> int:
 
 class UpstreamHandler(BaseHTTPRequestHandler):
     cancelled = threading.Event()
+    received = b""
 
     def do_POST(self) -> None:  # noqa: N802
         length = int(self.headers.get("Content-Length", "0"))
-        self.rfile.read(length)
+        type(self).received = self.rfile.read(length)
         if self.headers.get("X-Test-Stream") in ("1", "missing-finish"):
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
@@ -95,7 +96,7 @@ class IdleProxyTest(unittest.TestCase):
         self.upstream.server_close()
         self.temp.cleanup()
 
-    def start_proxy(self, ensure_exit: int = 0, *, idle_seconds: int = 60, capture: bool = False, capture_min: int = 0) -> tuple[Path, Path]:
+    def start_proxy(self, ensure_exit: int = 0, *, idle_seconds: int = 60, capture: bool = False, capture_min: int = 0, body_limit: int = 67108864) -> tuple[Path, Path]:
         route = self.root / "route.json"
         count = self.root / "ensure-count"
         ensure = self.root / "ensure"
@@ -124,6 +125,7 @@ class IdleProxyTest(unittest.TestCase):
                 "ABLITERATION_STATION_IDLE_SECONDS": str(idle_seconds),
                 "ABLITERATION_STATION_IDLE_POLL_MS": "100",
                 "ABLITERATION_STATION_TEST_MODE": "1",
+                "ABLITERATION_STATION_REQUEST_BODY_LIMIT_BYTES": str(body_limit),
                 "ABLITERATION_STATION_ROUTE_FILE": str(route),
                 "ABLITERATION_STATION_PROGRESS_FILE": str(self.root / "progress.json"),
                 "ABLITERATION_STATION_ACTIVITY_FILE": str(self.root / "activity.json"),
@@ -169,6 +171,22 @@ class IdleProxyTest(unittest.TestCase):
             results = list(pool.map(lambda _index: self.request(), range(2)))
         self.assertEqual(results, [{"ok": True}, {"ok": True}])
         self.assertEqual(count.read_text(encoding="utf-8"), "x")
+
+    def test_large_body_is_forwarded_unchanged(self) -> None:
+        self.start_proxy()
+        body=b'{"model":"qwen38-cloud"}'+b' '*1048576
+        request=urllib.request.Request(f"http://127.0.0.1:{self.proxy_port}/v1/chat/completions",data=body)
+        with urllib.request.urlopen(request,timeout=5) as response:
+            self.assertEqual(json.load(response),{"ok":True})
+        self.assertEqual(UpstreamHandler.received,body)
+
+    def test_oversized_body_rejected_before_rental(self) -> None:
+        count,_=self.start_proxy(body_limit=1024)
+        request=urllib.request.Request(f"http://127.0.0.1:{self.proxy_port}/v1/chat/completions",data=b' '*2048)
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            urllib.request.urlopen(request,timeout=5)
+        self.assertEqual(caught.exception.code,413)
+        self.assertFalse(count.exists())
 
     def test_dead_saved_route_is_replaced_instead_of_hanging(self) -> None:
         count, _stop_count = self.start_proxy()
@@ -405,7 +423,7 @@ class IdleProxyTest(unittest.TestCase):
     def test_cancel_during_wake_releases_request_before_wake_ends(self) -> None:
         count,_=self.start_proxy()
         sock=socket.create_connection(("127.0.0.1",self.proxy_port),timeout=2)
-        body=b'{"model":"qwen38-cloud"}'
+        body=b'{"model":"qwen38-cloud"}'+b' '*1048576
         sock.sendall(b"POST /v1/chat/completions HTTP/1.1\r\nHost: localhost\r\nContent-Length: "+str(len(body)).encode()+b"\r\n\r\n"+body)
         deadline=time.monotonic()+2
         while not count.exists() and time.monotonic()<deadline: time.sleep(.005)

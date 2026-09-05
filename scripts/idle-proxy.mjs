@@ -20,6 +20,8 @@ const ensureCommand = process.env.ABLITERATION_STATION_ENSURE_COMMAND ?? "/usr/l
 const configFile = process.env.ABLITERATION_STATION_CONFIG ?? "/etc/abliteration-station/config.json";
 const metricsFile = process.env.ABLITERATION_STATION_METRICS_FILE ?? "/var/lib/abliteration-station/metrics/requests.jsonl";
 const captureNextFile = process.env.ABLITERATION_STATION_CAPTURE_NEXT_FILE;
+const requestBodyLimit = Number(process.env.ABLITERATION_STATION_REQUEST_BODY_LIMIT_BYTES ?? "67108864");
+if (!Number.isSafeInteger(requestBodyLimit) || requestBodyLimit < 1) throw new Error("Invalid request body limit");
 const captureMinimumOutput = Number(process.env.ABLITERATION_STATION_CAPTURE_MIN_OUTPUT_TOKENS ?? "0");
 let captureAttempted = false;
 
@@ -357,6 +359,7 @@ const server = http.createServer(async (req, res) => {
     captureFinalizer?.(metric);
   };
   let route;
+  let requestBody = null;
   const cancelWaitingRequest = () => {
     if (finished) return;
     if (metric !== null) {
@@ -373,6 +376,30 @@ const server = http.createServer(async (req, res) => {
   req.once("aborted", cancelWaitingRequest);
   res.once("close", cancelWaitingRequest);
   try {
+    if (isInference) {
+      captureFinalizer = captureOneRequest(req);
+      requestBody = await new Promise((resolve, reject) => {
+        const chunks = [];
+        let size = 0;
+        const onData = (chunk) => {
+          size += chunk.length;
+          if (size > requestBodyLimit) {
+            req.removeListener("data", onData);
+            req.pause();
+            const error = new Error("Inference request body exceeds the configured byte limit");
+            error.httpStatus = 413;
+            reject(error);
+            return;
+          }
+          chunks.push(chunk);
+        };
+        req.on("data", onData);
+        req.once("end", () => resolve(Buffer.concat(chunks, size)));
+        req.once("error", reject);
+        req.once("aborted", () => reject(new Error("Request aborted before body completed")));
+      });
+      if (finished || res.destroyed) { removeWaitingListeners(); return; }
+    }
     const hadRoute = fs.existsSync(routeFile);
     if (metric !== null) metric.wake_required = !hadRoute;
     route = isInference ? await ensureRoute() : readRoute();
@@ -380,20 +407,20 @@ const server = http.createServer(async (req, res) => {
     if (metric !== null && !hadRoute) metric.wake_seconds = elapsedSeconds();
   } catch (error) {
     removeWaitingListeners();
-    if (finished || req.destroyed || res.destroyed) {
+    if (finished || req.aborted || res.destroyed) {
       cancelWaitingRequest();
       return;
     }
     if (metric !== null) {
-      metric.status = 503;
-      metric.error = `model wake failed: ${error.message}`;
+      metric.status = error.httpStatus ?? 503;
+      metric.error = error.httpStatus ? error.message : `model wake failed: ${error.message}`;
     }
     finish();
-    res.writeHead(503, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: { message: `model wake failed: ${error.message}` } }));
+    res.writeHead(error.httpStatus ?? 503, { "Content-Type": "application/json", "Connection": "close" });
+    res.end(JSON.stringify({ error: { message: metric?.error ?? error.message } }));
     return;
   }
-  if (req.destroyed || res.destroyed) {
+  if (finished || req.aborted || res.destroyed) {
     if (metric !== null) {
       metric.cancelled = true;
       metric.error = "client disconnected while waiting for model wake";
@@ -477,8 +504,8 @@ const server = http.createServer(async (req, res) => {
     }
     finish();
   });
-  if (isInference) captureFinalizer = captureOneRequest(req);
-  req.pipe(upstreamRequest);
+  if (isInference) upstreamRequest.end(requestBody);
+  else req.pipe(upstreamRequest);
 });
 
 server.listen(listenPort, listenHost, () => {
