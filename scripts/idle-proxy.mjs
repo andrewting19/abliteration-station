@@ -357,12 +357,33 @@ const server = http.createServer(async (req, res) => {
     captureFinalizer?.(metric);
   };
   let route;
+  const cancelWaitingRequest = () => {
+    if (finished) return;
+    if (metric !== null) {
+      metric.cancelled = true;
+      metric.status = 499;
+      metric.error = "client disconnected while waiting for model wake";
+    }
+    finish();
+  };
+  const removeWaitingListeners = () => {
+    req.removeListener("aborted", cancelWaitingRequest);
+    res.removeListener("close", cancelWaitingRequest);
+  };
+  req.once("aborted", cancelWaitingRequest);
+  res.once("close", cancelWaitingRequest);
   try {
     const hadRoute = fs.existsSync(routeFile);
     if (metric !== null) metric.wake_required = !hadRoute;
     route = isInference ? await ensureRoute() : readRoute();
+    removeWaitingListeners();
     if (metric !== null && !hadRoute) metric.wake_seconds = elapsedSeconds();
   } catch (error) {
+    removeWaitingListeners();
+    if (finished || req.destroyed || res.destroyed) {
+      cancelWaitingRequest();
+      return;
+    }
     if (metric !== null) {
       metric.status = 503;
       metric.error = `model wake failed: ${error.message}`;

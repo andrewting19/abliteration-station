@@ -402,6 +402,25 @@ class IdleProxyTest(unittest.TestCase):
         sock.close()
         self.assertTrue(UpstreamHandler.cancelled.wait(3))
 
+    def test_cancel_during_wake_releases_request_before_wake_ends(self) -> None:
+        count,_=self.start_proxy()
+        sock=socket.create_connection(("127.0.0.1",self.proxy_port),timeout=2)
+        body=b'{"model":"qwen38-cloud"}'
+        sock.sendall(b"POST /v1/chat/completions HTTP/1.1\r\nHost: localhost\r\nContent-Length: "+str(len(body)).encode()+b"\r\n\r\n"+body)
+        deadline=time.monotonic()+2
+        while not count.exists() and time.monotonic()<deadline: time.sleep(.005)
+        self.assertTrue(count.exists())
+        sock.close()
+        deadline=time.monotonic()+.25
+        health={}
+        while time.monotonic()<deadline:
+            with urllib.request.urlopen(f"http://127.0.0.1:{self.proxy_port}/healthz",timeout=1) as response:
+                health=json.load(response)
+            if health['active_requests']==0: break
+            time.sleep(.005)
+        self.assertEqual(health['active_requests'],0)
+        self.assertTrue(health['wake_in_flight'])
+
 
 if __name__ == "__main__":
     unittest.main()
