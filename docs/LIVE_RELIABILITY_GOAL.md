@@ -257,3 +257,30 @@ a build-only driver-stub search path. Replacement run 33962877786 is active;
 no candidate has passed numerical or real-request performance gates yet.
 Local release checks passed 85 tests with two Linux-only skips. Both skipped
 probe tests passed separately on Kevin with the exact engine headers.
+
+## GPU numerical investigation (2026-09-05)
+
+Run 33962877786 passed. Downloaded library hashes and source trees matched the
+build record. Large image pulls on test instances 49956315 and 49958258 did
+not reach SSH; the second reported retries for three roughly 4 GB model layers.
+Both instances were deleted and their absence verified. These attempts do not
+pass the cold-start gate. A partial layer read from the Mac succeeded, which
+does not establish that the worker network path was healthy.
+
+Test instance 49959229 uses a CUDA base image, costs $0.48056/hour, and has a
+cleanup timer for 12:59:56 UTC. SSH and an RTX 5090 with driver 595.84 were
+verified. It is separate from the production route.
+
+Both paired libraries fail the existing CUDA matrix test for IQ2_S and IQ3_S.
+The CPU-only test passes 28 cases; CUDA GET_ROWS passes eight cases. An
+independent full-matrix test confirms the discrepancy against scalar arithmetic:
+CPU NMSE is about 0.00005, while CUDA NMSE is 0.36 to 0.51. Disabling CUDA graphs
+and PDL does not change this result. No tolerance was loosened.
+
+Smaller diagnostics pass: CPU dot products agree with scalar dequantized dot
+products within 0.000002 absolute error, all 512 sign-mask cases pass, and a
+direct CUDA dot-product check passes with and without fast math. These narrow
+checks do not excuse the full-matrix failures. Initial diagnostic helper errors
+were corrected before collecting those results. Production remains unchanged.
+The full-matrix input, activation conversion, and dispatch paths need further
+investigation before either candidate can be accepted or benchmarked on Pi.
