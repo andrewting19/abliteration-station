@@ -1,5 +1,24 @@
 # Live Pi reliability and speed goal
 
+## Five-dollar continuation, 2026-09-05
+
+The user added funds and authorized at most five additional dollars before
+reassessment. Starting account funds were 9.377988496900272 USD. Kevin's
+spend_guard.py counts total account drawdown, including retained storage, and
+stops labelled test rentals at 4.75 USD drawdown with a 0.25 USD margin. The
+label prefix is qwen-goal5-20260905-. Production instances are not owned by
+this guard. No automatic top-up was enabled.
+
+On test instance 49994797, the real 201715-token request measured 66.19 TPS
+with the fixed baseline (1004 output tokens), 41.99 TPS with the four-column
+fused tile (1464 output tokens), and 38.70 TPS with direct-Q4 vector attention
+at eight query columns (2937 output tokens). Responses differ, so these are not
+equal-output comparisons. All finished with tool calls. Both candidates are
+rejected as speed improvements. The vector candidate passed 18 numerical cases
+and a zero-error memory check before replay. Summaries are saved directly on
+Kevin under benchmarks/private/q4-mma-results in service state. Drawdown was
+about 0.60 USD at the last check; all full-goal gates remain in force.
+
 ## Current funding blocker (2026-09-05 16:20 UTC)
 
 Vast reports balance -0.037874 USD, credit zero, and credit-only billing.
