@@ -92,7 +92,45 @@ the current price against the cap before asking Vast to resume compute. The
 machine-specific rental, capture, idle-age, and price changes pass 67 tests and
 the release checks.
 
-The one captured live request had 212,409 input tokens and produced 1,427
-output tokens at 68.84 tokens/s on the production host. It ended with a valid
-tool-calls finish reason. Use this same private payload for the isolated
-comparison; do not substitute a shorter prompt as the acceptance result.
+The initial capture was matched to the wrong nearby metrics record. Its file
+timestamp identifies the 208,587-token request, whose production response was
+52 tokens. It is not a sustained decode workload. The capture can now require
+a minimum completed output count and writes a matching private metrics sidecar.
+
+## Completed isolated checks, 2026-09-05
+
+- The captured 208,587-token request cold-prefilled in 166.82 seconds at
+  1,250.35 tokens/s. Its 46-token result is excluded from speed acceptance.
+- Three stopped-instance resume and provider-local cache probes reached their
+  first token in 30.64, 38.59, and 21.36 seconds. Each reused 208,583 tokens and
+  processed only four prompt tokens. Each returned a tool call with the same
+  reasoning hash. These are isolated controller/provider probes, not three
+  live Pi TUI wakes.
+- A proxy cancellation probe closed the client after its first actual token.
+  The proxy recorded cancellation; the server became idle 0.59 seconds later.
+- Historical request prefixes were reconstructed using exact tool-call IDs,
+  excluding the reference assistant answer. Replayed token counts matched the
+  production counts exactly. The 201,715-token case produced 2,728 output tokens
+  at 63.17 TPS. The 196,442-token case produced 3,076 output tokens at 53.53 TPS.
+  Both ended with tool calls. The faster-CPU host is not promoted as an 80 TPS
+  improvement.
+- The test instance was destroyed, and absence was verified before closing
+  its cleanup timer. No test GPU remains rented.
+
+## Production completion and idle stop
+
+The user's Pi turn ended normally at 05:16:06 UTC. Its final context was about
+51K after compaction. The normal idle controller saved 51,545 tokens and
+stopped the retained instance about 610 seconds after the last activity. The
+route was cleared and the provider reported exited/stopped. This is an actual
+production idle-stop check, not an artificially shortened timer.
+
+The 80 TPS real-context gate and fresh-instance first-token gate remain open.
+The three isolated wake probes do not establish three complete live Pi TUI
+wake cycles. Further speed experiments must retain the real request corpus,
+sampling settings, target quantization, and tool constraints.
+
+The completed changes pass 72 tests and the release checks. Cancelled HTTP 200
+streams are excluded from successful-turn throughput. Summary output reports
+successful-output cost separately. The no-route idle path no longer repeatedly
+invokes a stop command that cannot succeed.

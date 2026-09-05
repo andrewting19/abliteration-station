@@ -23,6 +23,7 @@ elif [[ ${REQUIRE_SHELLCHECK:-0} == 1 ]]; then
 fi
 
 node --check scripts/idle-proxy.mjs
+bash -n benchmarks/run_retained_probe.sh
 npm pack --dry-run --json >/tmp/abliteration-station-npm-pack.json
 python3 - <<'PY'
 import json

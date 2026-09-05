@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import importlib.util
+import contextlib
+import io
 import json
+import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -22,6 +26,8 @@ def load(name: str, path: Path):
 MEASURE = load("measure_openai", ROOT / "benchmarks" / "measure_openai.py")
 ANALYZE = load("analyze_results", ROOT / "benchmarks" / "analyze_results.py")
 PROXY_SUMMARY = load("summarize_proxy_metrics", ROOT / "benchmarks" / "summarize_proxy_metrics.py")
+REPLAY = load("replay_captured_pi", ROOT / "scripts" / "vast" / "replay_captured_pi.py")
+RECONSTRUCT = load("reconstruct_pi_request", ROOT / "benchmarks" / "reconstruct_pi_request.py")
 
 
 class StreamHandler(BaseHTTPRequestHandler):
@@ -30,6 +36,7 @@ class StreamHandler(BaseHTTPRequestHandler):
         events = [
             {"choices": [{"delta": {"reasoning_content": "The sum is "}}]},
             {"choices": [{"delta": {"content": "110"}}]},
+            {"choices": [{"delta": {}, "finish_reason": "stop"}]},
             {
                 "choices": [],
                 "usage": {"prompt_tokens": 20, "completion_tokens": 10},
@@ -53,6 +60,54 @@ class StreamHandler(BaseHTTPRequestHandler):
 
 
 class BenchmarkTest(unittest.TestCase):
+    def test_cancelled_http_200_is_not_a_successful_turn(self) -> None:
+        result = PROXY_SUMMARY.summarize([{
+            "status": 200, "cancelled": True, "error": None, "total_seconds": 10,
+            "usage": {"completion_tokens": 100},
+            "timings": {"predicted_n": 100, "predicted_per_second": 100},
+        }], 0.5)
+        self.assertEqual(result["successful_requests"], 0)
+        self.assertEqual(result["successful_output_tokens"], 0)
+        self.assertIsNone(result["decode_tps_token_weighted"])
+        self.assertIsNone(result["usd_per_million_successful_output_tokens"])
+
+    def test_historical_request_excludes_the_reference_answer(self) -> None:
+        payload = {"model": "test", "tools": [{"type": "function"}], "messages": [
+            {"role": "user", "content": "task"},
+            {"role": "assistant", "tool_calls": [{"id": "call-a", "function": {"arguments": "answer"}}]},
+            {"role": "tool", "content": "result"},
+        ]}
+        event = {"timestamp": "test-time", "message": {"role": "assistant", "stopReason": "toolUse",
+            "content": [{"type": "toolCall", "id": "call-a"}],
+            "usage": {"input": 100, "cacheRead": 200000, "output": 2048}}}
+        request, metadata = RECONSTRUCT.reconstruct(payload, event)
+        self.assertEqual(request["messages"], payload["messages"][:1])
+        self.assertEqual(request["tools"], payload["tools"])
+        self.assertEqual(metadata["expected_prompt_tokens"], 200100)
+        self.assertNotIn("answer", json.dumps(request))
+
+    def test_real_replay_measures_stream_first_token_without_printing_content(self) -> None:
+        server = ThreadingHTTPServer(("127.0.0.1", 0), StreamHandler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        try:
+            with tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                capture = root / "capture.json"
+                key = root / "key"
+                capture.write_text(json.dumps({"model": "test", "messages": []}), encoding="utf-8")
+                key.write_text("test-only", encoding="utf-8")
+                output = io.StringIO()
+                with patch("sys.argv", ["replay", str(capture), "--stream", "--base-url", f"http://127.0.0.1:{server.server_port}", "--api-key-file", str(key)]), contextlib.redirect_stdout(output):
+                    REPLAY.main()
+                result = json.loads(output.getvalue())
+                self.assertGreater(result["first_token_seconds"], 0)
+                self.assertEqual(result["finish_reason"], "stop")
+                self.assertEqual(result["usage"]["completion_tokens"], 10)
+                self.assertNotIn("The sum is", output.getvalue())
+        finally:
+            server.shutdown()
+            server.server_close()
+
     def test_measurement_captures_speed_cost_quality_and_acceptance(self) -> None:
         server = ThreadingHTTPServer(("127.0.0.1", 0), StreamHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)

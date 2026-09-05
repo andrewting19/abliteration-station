@@ -19,6 +19,7 @@ def main() -> None:
     parser.add_argument("--inference-key-file", required=True)
     parser.add_argument("--lifecycle-token-file", required=True)
     parser.add_argument("--cache-command", required=True)
+    parser.add_argument("--provider-local", action="store_true", help="Restore on the same retained instance without portable import")
     args = parser.parse_args()
     root = args.work_directory.resolve()
     state_file = root / "cache-state.json"
@@ -53,7 +54,7 @@ def main() -> None:
     route = Route(
         "vast",
         args.upstream.rstrip("/"),
-        {"instance_id": args.instance_id, "restore_gate": 1},
+        {"instance_id": args.instance_id} if args.provider_local else {"instance_id": args.instance_id, "restore_gate": 1},
     )
     restored = Controller(config).restore_cache(route)
     if not restored:
@@ -62,7 +63,8 @@ def main() -> None:
     print(json.dumps({
         "restored": True,
         "instance_id": args.instance_id,
-        "archive": state["artifact"]["sha256"]["archive"],
+        "archive": (state.get("artifact") or {}).get("sha256", {}).get("archive"),
+        "storage": state.get("storage"),
         "runtime": state["runtime"]["fingerprint"],
     }, sort_keys=True))
 

@@ -43,6 +43,7 @@ class UpstreamHandler(BaseHTTPRequestHandler):
             self.wfile.write(b'data: {"choices":[{"delta":{"content":"private-test-text"}}]}\n\n')
             if self.headers.get("X-Test-Stream") != "missing-finish":
                 self.wfile.write(b'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n')
+                self.wfile.write(("data: " + json.dumps({"usage": {"completion_tokens": int(self.headers.get("X-Test-Tokens", "100"))}}) + "\n\n").encode())
             return
         body = b'{"ok":true}'
         self.send_response(200)
@@ -94,7 +95,7 @@ class IdleProxyTest(unittest.TestCase):
         self.upstream.server_close()
         self.temp.cleanup()
 
-    def start_proxy(self, ensure_exit: int = 0, *, idle_seconds: int = 60, capture: bool = False) -> tuple[Path, Path]:
+    def start_proxy(self, ensure_exit: int = 0, *, idle_seconds: int = 60, capture: bool = False, capture_min: int = 0) -> tuple[Path, Path]:
         route = self.root / "route.json"
         count = self.root / "ensure-count"
         ensure = self.root / "ensure"
@@ -136,6 +137,7 @@ class IdleProxyTest(unittest.TestCase):
             environment["ABLITERATION_STATION_CAPTURE_NEXT_FILE"] = str(self.root / "private" / "capture.json")
         else:
             environment.pop("ABLITERATION_STATION_CAPTURE_NEXT_FILE", None)
+        environment["ABLITERATION_STATION_CAPTURE_MIN_OUTPUT_TOKENS"] = str(capture_min)
         self.process = subprocess.Popen(
             [shutil.which("node") or "node", str(PROXY)],
             env=environment,
@@ -279,12 +281,18 @@ class IdleProxyTest(unittest.TestCase):
 
     def test_idle_route_is_stopped_once(self) -> None:
         _count, stop_count = self.start_proxy(idle_seconds=1)
+        self.request()
         deadline = time.monotonic() + 3
         while time.monotonic() < deadline and not stop_count.exists():
             time.sleep(0.05)
         self.assertTrue(stop_count.exists())
         time.sleep(0.4)
         self.assertEqual(stop_count.read_text(encoding="utf-8"), "x")
+
+    def test_idle_without_route_does_not_repeat_stop_errors(self) -> None:
+        _count, stop_count = self.start_proxy(idle_seconds=1)
+        time.sleep(1.4)
+        self.assertFalse(stop_count.exists())
 
     def test_first_token_excludes_role_only_event(self) -> None:
         self.start_proxy()
@@ -320,6 +328,9 @@ class IdleProxyTest(unittest.TestCase):
         self.start_proxy(capture=True)
         self.request()
         capture = self.root / "private" / "capture.json"
+        deadline = time.monotonic() + 2
+        while not capture.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
         self.assertTrue(capture.exists())
         self.assertEqual(capture.stat().st_mode & 0o777, 0o600)
         original = capture.read_bytes()
@@ -331,6 +342,23 @@ class IdleProxyTest(unittest.TestCase):
         self.start_proxy()
         self.request()
         self.assertFalse((self.root / "private").exists())
+
+    def test_capture_skips_short_response_then_records_matching_metrics(self) -> None:
+        self.start_proxy(capture=True, capture_min=512)
+        self.request()
+        capture = self.root / "private" / "capture.json"
+        self.assertFalse(capture.exists())
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{self.proxy_port}/v1/chat/completions", data=b'{"long":true}',
+            headers={"X-Test-Stream": "1", "X-Test-Tokens": "1024"})
+        with urllib.request.urlopen(request, timeout=5) as response:
+            response.read()
+        deadline = time.monotonic() + 2
+        while not Path(str(capture) + ".metrics.json").exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertEqual(json.loads(capture.read_text()), {"long": True})
+        metadata = json.loads(Path(str(capture) + ".metrics.json").read_text())
+        self.assertEqual(metadata["usage"]["completion_tokens"], 1024)
 
     def test_restart_preserves_idle_age(self) -> None:
         previous = int(time.time() * 1000) - 10000

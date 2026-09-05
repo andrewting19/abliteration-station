@@ -20,6 +20,7 @@ const ensureCommand = process.env.ABLITERATION_STATION_ENSURE_COMMAND ?? "/usr/l
 const configFile = process.env.ABLITERATION_STATION_CONFIG ?? "/etc/abliteration-station/config.json";
 const metricsFile = process.env.ABLITERATION_STATION_METRICS_FILE ?? "/var/lib/abliteration-station/metrics/requests.jsonl";
 const captureNextFile = process.env.ABLITERATION_STATION_CAPTURE_NEXT_FILE;
+const captureMinimumOutput = Number(process.env.ABLITERATION_STATION_CAPTURE_MIN_OUTPUT_TOKENS ?? "0");
 let captureAttempted = false;
 
 // Explicit debug opt-in only. Keep sensitive request bodies out of metrics.
@@ -30,11 +31,15 @@ function captureOneRequest(req) {
   const temporary = `${captureNextFile}.partial`;
   let descriptor;
   let size = 0;
+  let payloadComplete = false;
+  let released = false;
   const discard = () => {
-    if (descriptor === undefined) return;
-    try { fs.closeSync(descriptor); } catch {}
+    if (released) return;
+    released = true;
+    if (descriptor !== undefined) { try { fs.closeSync(descriptor); } catch {} }
     descriptor = undefined;
     try { fs.unlinkSync(temporary); } catch {}
+    captureAttempted = false;
   };
   try {
     fs.mkdirSync(path.dirname(captureNextFile), { recursive: true, mode: 0o700 });
@@ -47,7 +52,10 @@ function captureOneRequest(req) {
     if (descriptor === undefined) return;
     size += chunk.length;
     if (size > 32 * 1024 * 1024) { discard(); return; }
-    try { fs.writeSync(descriptor, chunk); } catch { discard(); }
+    try {
+      let offset = 0;
+      while (offset < chunk.length) offset += fs.writeSync(descriptor, chunk, offset);
+    } catch { discard(); }
   });
   req.once("aborted", discard);
   req.once("error", discard);
@@ -56,14 +64,31 @@ function captureOneRequest(req) {
     try {
       fs.closeSync(descriptor);
       descriptor = undefined;
+      payloadComplete = true;
+    } catch { discard(); }
+  });
+  return (metric) => {
+    if (released) return;
+    const tokens = metric?.usage?.completion_tokens ?? metric?.timings?.predicted_n ?? 0;
+    if (!payloadComplete || metric?.status !== 200 || metric.error || metric.cancelled || tokens < captureMinimumOutput) {
+      discard();
+      return;
+    }
+    try {
       // link fails if the destination exists; never overwrite a prior capture.
       fs.linkSync(temporary, captureNextFile);
+      fs.writeFileSync(`${captureNextFile}.metrics.json`, JSON.stringify(metric), { flag: "wx", mode: 0o600 });
     } catch {
       console.error("Private request capture was not saved; inference continues.");
     } finally {
+      released = true;
       try { fs.unlinkSync(temporary); } catch {}
     }
-  });
+  };
+}
+
+if (!Number.isSafeInteger(captureMinimumOutput) || captureMinimumOutput < 0) {
+  throw new Error("Capture minimum output must be a non-negative integer");
 }
 
 if (!Number.isFinite(idleSeconds) || idleSeconds < (testMode ? 1 : 60)) {
@@ -243,8 +268,14 @@ setInterval(() => {
     activeRequests !== 0 ||
     now - lastActivityMs < idleSeconds * 1000 ||
     stoppedActivityMs === lastActivityMs ||
-    stopInFlight
+    stopInFlight || ensureInFlight !== null
   ) return;
+  if (!fs.existsSync(routeFile)) {
+    // There is no active provider record for the controller to stop.
+    stoppedActivityMs = lastActivityMs;
+    writeState();
+    return;
+  }
   stopIdleProvider(lastActivityMs);
 }, idlePollMs).unref();
 
@@ -300,6 +331,7 @@ const server = http.createServer(async (req, res) => {
   const metricStarted = process.hrtime.bigint();
   const elapsedSeconds = () => Number(process.hrtime.bigint() - metricStarted) / 1e9;
   let metricWritten = false;
+  let captureFinalizer = null;
   const writeMetric = () => {
     if (metric === null || metricWritten) return;
     metricWritten = true;
@@ -315,6 +347,7 @@ const server = http.createServer(async (req, res) => {
       touch();
     }
     writeMetric();
+    captureFinalizer?.(metric);
   };
   let route;
   try {
@@ -416,7 +449,7 @@ const server = http.createServer(async (req, res) => {
     }
     finish();
   });
-  if (isInference) captureOneRequest(req);
+  if (isInference) captureFinalizer = captureOneRequest(req);
   req.pipe(upstreamRequest);
 });
 
