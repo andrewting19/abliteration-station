@@ -7,7 +7,7 @@ on:
         description: Artifact to build
         type: choice
         default: image
-        options: [image, cuda-iq-mmq]
+        options: [image, cuda-iq-mmq, q4-mma-tile]
   push:
     branches: [main]
     paths:
@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   publish:
-    if: github.event_name != 'workflow_dispatch' || inputs.mode != 'cuda-iq-mmq'
+    if: github.event_name != 'workflow_dispatch' || inputs.mode == 'image'
     runs-on: ubuntu-24.04
     outputs:
       digest: ${{ steps.build_image.outputs.digest }}
@@ -102,5 +102,22 @@ jobs:
         with:
           name: iq-mmq-candidate
           path: dist/iq-mmq-candidate
+          retention-days: 3
+          if-no-files-found: error
+  q4_mma_tile:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'q4-mma-tile'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Compile isolated Q4 attention tile probe
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE:/work" -w /work \
+            nvidia/cuda@sha256:f9492f2eea77fbc3d0c14fa8738f35946b42da72917bf5959d284ca39b4f209a \
+            bash -lc 'apt-get update && apt-get install -y --no-install-recommends git build-essential ca-certificates && bash benchmarks/build_q4_mma_tile_probe.sh'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: q4-mma-tile-probe
+          path: dist/q4-mma-tile-probe
           retention-days: 3
           if-no-files-found: error
