@@ -116,6 +116,7 @@ let inhibitUntilMs = 0;
 let stopInFlight = false;
 let stopPromise = null;
 let ensureInFlight = null;
+let ensureStartedMs = 0;
 let lastWakeError = null;
 
 function readRoute() {
@@ -168,6 +169,10 @@ function removeRouteIfUnchanged(staleRoute) {
 
 function writeState() {
   const now = Date.now();
+  const progress = readProgress();
+  const currentProgress = progress?.phase_started_unix_ms >= ensureStartedMs
+    ? progress
+    : { phase: "starting", message: "Starting Qwen", phase_started_unix_ms: ensureStartedMs, eta_seconds: null };
   const temporary = `${activityFile}.tmp`;
   fs.writeFileSync(temporary, `${JSON.stringify({
     active_requests: activeRequests,
@@ -178,7 +183,7 @@ function writeState() {
     stopped_for_activity_unix_ms: stoppedActivityMs,
     wake_in_flight: ensureInFlight !== null,
     last_wake_error: fs.existsSync(routeFile) ? null : lastWakeError,
-    lifecycle: ensureInFlight !== null ? readProgress() : null,
+    lifecycle: ensureInFlight !== null ? currentProgress : null,
     route: fs.existsSync(routeFile) ? readRoute() : null,
   })}\n`, { mode: 0o600 });
   fs.renameSync(temporary, activityFile);
@@ -225,6 +230,7 @@ async function ensureRoute() {
     // Continue to the serialized wake path.
   }
   if (ensureInFlight === null) {
+    ensureStartedMs = Date.now();
     ensureInFlight = (async () => {
       if (stopPromise !== null) await stopPromise;
       const wakeStartedMs = Date.now();
@@ -253,6 +259,7 @@ async function ensureRoute() {
       throw error;
     }).finally(() => {
       ensureInFlight = null;
+      ensureStartedMs = 0;
       writeState();
     });
     writeState();

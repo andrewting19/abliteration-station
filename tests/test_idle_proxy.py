@@ -200,7 +200,7 @@ class IdleProxyTest(unittest.TestCase):
             json.dumps({
                 "phase": "retained_wait",
                 "message": "Waiting for retained GPU",
-                "phase_started_unix_ms": 1,
+                "phase_started_unix_ms": int(time.time() * 1000) + 1000,
                 "eta_seconds": 300,
             }),
             encoding="utf-8",
@@ -222,6 +222,25 @@ class IdleProxyTest(unittest.TestCase):
                     break
                 time.sleep(0.02)
             self.assertEqual(lifecycle["phase"], "retained_wait")
+            future.result()
+
+    def test_stale_ready_phase_is_not_shown_during_new_wake(self) -> None:
+        (self.root / "progress.json").write_text(json.dumps({
+            "phase": "ready", "message": "Old ready message",
+            "phase_started_unix_ms": 1, "eta_seconds": 0,
+        }))
+        self.start_proxy()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future=pool.submit(self.request)
+            deadline=time.monotonic()+2
+            observed=None
+            while time.monotonic()<deadline:
+                with urllib.request.urlopen(f"http://127.0.0.1:{self.proxy_port}/healthz",timeout=1) as response:
+                    observed=json.load(response).get("lifecycle")
+                if observed is not None: break
+                time.sleep(.01)
+            self.assertEqual(observed["phase"],"starting")
+            self.assertNotEqual(observed["phase_started_unix_ms"],1)
             future.result()
 
     def test_wake_failure_reports_current_phase_failure(self) -> None:
