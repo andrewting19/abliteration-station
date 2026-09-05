@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Conservative account drawdown guard for explicitly labelled test rentals."""
 import argparse
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -20,6 +21,8 @@ def main():
     parser.add_argument('state',type=Path)
     parser.add_argument('--vastai',required=True)
     args=parser.parse_args()
+    lock_fd=os.open(args.state.with_suffix('.lock'),os.O_RDWR|os.O_CREAT,0o600)
+    fcntl.flock(lock_fd,fcntl.LOCK_EX)
     state=json.loads(args.state.read_text())
     def call(*command):
         result=subprocess.run([args.vastai,*command,'--raw'],check=True,capture_output=True,text=True,timeout=30)

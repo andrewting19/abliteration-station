@@ -19,15 +19,34 @@ and a zero-error memory check before replay. Summaries are saved directly on
 Kevin under benchmarks/private/q4-mma-results in service state. Drawdown was
 about 0.60 USD at the last check; all full-goal gates remain in force.
 
-## Current funding blocker (2026-09-05 16:20 UTC)
+## Resolved funding interruption (2026-09-05 16:20 UTC)
 
-Vast reports balance -0.037874 USD, credit zero, and credit-only billing.
+Vast then reported balance -0.037874 USD, credit zero, and credit-only billing.
 Test instance 49977258 changed to exited/stopped before the smaller-tile replay
 connected. The cleanup service had not run, and the production proxy had no
 matching stop event. The controller summary is empty and is not a valid result.
-No paid restart or rental should be attempted until funds are available.
-The existing cleanup timer remains set for 16:54:37 UTC. Production instance
-49928587 is also stopped. No performance or full-lifecycle completion is claimed.
+The user subsequently added funds with the five-dollar continuation limit above.
+This is a historical interruption, not the current blocker. No performance or
+full-lifecycle completion is claimed.
+
+## Isolated live Pi lifecycle check
+
+A private session branch from the historical 201715-token boundary uses the
+actual Pi package with a read-only fixture guard. Its first request was 185643
+tokens after the reduced tool set and test prompt, and completed a read tool
+call plus the correct fixture heading. This is a functional test, not a speed
+acceptance workload. The original session and production route were unchanged.
+
+The first wake attempt failed because the isolated systemd proxy lacked the
+root HOME environment. After correcting the test service, a Pi prompt resumed
+the stopped test instance, restored 185744 cached tokens, and completed its
+tool call and final response. First token took 55.454 seconds; the functional
+cycle passed, but the 45-second target failed. A stale ready phase was also
+observed; commit 679f8d4 fixes its reporting and passes 19 proxy tests. The fix
+is deployed only to the isolated proxy, whose idle clock survived restart.
+The real ten-minute idle-stop check is in progress; three cycles are not yet
+verified. All lifecycle test state is under the private pi-lifecycle-49994797
+directory on Kevin.
 
 Started 2026-09-05 UTC. Status: active, not accepted.
 
