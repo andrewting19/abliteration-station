@@ -31,6 +31,20 @@ full-lifecycle completion is claimed.
 
 ## Isolated live Pi lifecycle check
 
+Follow-up results: a second wake restored about 186K cache tokens and completed
+the read tool and final answer, but first token took 64.408 seconds. The third
+attempt failed after a stale provider-state shortcut in the test helper; that
+shortcut was removed. Its retry failed because Vast could not return the
+retained GPU within 45 seconds. The queued start was cancelled. There are not
+three consecutive passing cycles, and neither successful wake met 45 seconds.
+
+The ten-minute idle check first refused to stop because restarting the isolated
+proxy killed its child SSH tunnel. Required cache-save protection worked; this
+was a test-route fault, not proof of a production Tailscale failure. Restoring
+the tunnel allowed the automatic save of 185974 tokens and stop, but the delay
+means the clean idle-timing gate remains open. Current budget drawdown was
+0.91888 USD; the test instance is stopped and retains its bounded cleanup timer.
+
 A private session branch from the historical 201715-token boundary uses the
 actual Pi package with a read-only fixture guard. Its first request was 185643
 tokens after the reduced tool set and test prompt, and completed a read tool
