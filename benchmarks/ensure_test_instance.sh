@@ -9,10 +9,10 @@ guard=/var/lib/abliteration-station/benchmarks/private/qwen-goal-five-dollar-sta
 jq -e '.stopped == false' "$guard" >/dev/null
 state=$("$vast/.vast-venv/bin/vastai" show instance "$instance" --raw)
 jq -e '.dph_total <= 0.53 and (.label | startswith("qwen-goal5-20260905-"))' <<< "$state" >/dev/null
-if [[ $(jq -r '.actual_status' <<< "$state") != running ]]; then
-  "$vast/.vast-venv/bin/vastai" start instance "$instance" --raw >&2
-  ABLITERATION_STATION_PROGRESS_COMMAND=/bin/true "$vast/qwen-vast" resume "$instance" >&2
-fi
+# Provider status can lag a just-completed stop request. Set the desired state
+# explicitly, then use the readiness wait rather than trusting the first read.
+"$vast/.vast-venv/bin/vastai" start instance "$instance" --raw >&2
+ABLITERATION_STATION_PROGRESS_COMMAND=/bin/true "$vast/qwen-vast" resume "$instance" >&2
 state=$("$vast/.vast-venv/bin/vastai" show instance "$instance" --raw)
 host=$(jq -er '.public_ipaddr' <<< "$state")
 port=$(jq -er '.ports["22/tcp"][0].HostPort' <<< "$state")
