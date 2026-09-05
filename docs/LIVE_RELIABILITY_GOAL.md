@@ -308,3 +308,31 @@ batch dispatch. This separates correctness work from the proposed speed change.
 The full rebuilt artifacts must repeat numerical checks before real Pi replay.
 Test instance 49959229 was deleted after logs were copied. Its absence was
 verified. Production remains unchanged, and all agentic speed gates remain open.
+
+## Full-library and real-request results
+
+Full build 33967291510 passed. On isolated instance 49964346, both libraries
+passed 130/130 numerical tests. At 196,442 context tokens, fixed baseline decoded
+3,076 tokens at 52.04 TPS; the dispatch candidate decoded 808 at 53.80 TPS. At
+201,715 context tokens, baseline decoded 1,004 at 66.33 TPS and candidate decoded
+1,603 at 71.28 TPS. All finished with tool calls. Outputs differ, so these are
+not equal-output speed comparisons. The candidate is not accepted as an 80 TPS
+solution. Baseline cold prefill was 1,270 to 1,273 TPS. Candidate's second test
+reused 196,438 cache tokens; do not compare its prefill time with a cold run.
+
+A bounded Nsight Systems trace of the baseline 201K request preserved its
+output hashes. Profiling changed decode from 66.33 to 62.39 TPS; do not use
+profiled throughput for acceptance. The final 15 seconds of GPU kernel activity
+fall within the reported 16.08-second decode phase. Summed kernel durations were
+5.00 seconds for vector matrix products, 4.16 seconds for Q4 dequantization, and
+2.78 seconds for attention. Summed durations are not necessarily wall time if
+kernels overlap. The SQLite trace is saved privately on Kevin as
+`benchmarks/private/iq-mmq-results/real-201715-trace.sqlite` in service state.
+
+The target attention kernels have head width 256. Q4 cache support is already
+compiled by default; enabling FA_ALL_QUANTS alone is not the proposed fix.
+The current selector uses direct quantized vector attention only for batches
+up to two tokens on this GPU, then selects FP16 matrix attention. Test direct
+Q4 vector attention for the seven-token verification batch as a separate
+candidate. Numerical and real-request gates remain required. Production is
+unchanged.
