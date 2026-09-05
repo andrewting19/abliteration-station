@@ -105,6 +105,15 @@ resume_existing() {
   ' >/dev/null 2>&1 <<<"$instance_json" || return 1
   actual_status=$(jq -r '.actual_status // empty' <<<"$instance_json")
 
+  if ! jq -e --argjson cap "$PRICE_CAP" '
+      .dph_total as $price |
+      ($price | type) == "number" and $price >= 0 and $price <= $cap
+    ' >/dev/null <<<"$instance_json"; then
+    echo "The retained instance price is unknown or exceeds the current hourly cap; it will not be resumed." >&2
+    "$PROGRESS_COMMAND" retained_price_rejected "Retained GPU price exceeds the cap or is unknown; selecting a replacement" 30 "$instance_id"
+    return 1
+  fi
+
   case "$actual_status" in
     running|loading) ;;
     *)

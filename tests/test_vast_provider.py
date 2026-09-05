@@ -231,6 +231,7 @@ class VastProviderTest(unittest.TestCase):
             offers = [
                 {
                     "id": 101,
+                    "machine_id": 11,
                     "dph_total": 0.3,
                     "cuda_max_good": 13.2,
                     "pcie_bw": 30,
@@ -238,6 +239,7 @@ class VastProviderTest(unittest.TestCase):
                 },
                 {
                     "id": 202,
+                    "machine_id": 22,
                     "dph_total": 0.31,
                     "cuda_max_good": 13.2,
                     "pcie_bw": 30,
@@ -251,8 +253,10 @@ class VastProviderTest(unittest.TestCase):
                 f"offers = {offers!r}\n"
                 "args = sys.argv[1:]\n"
                 "if args[:2] == ['search', 'offers']:\n"
-                "    exact = next((p.split('=', 1)[1] for p in args[2].split() if p.startswith('id=')), None)\n"
-                "    print(json.dumps([o for o in offers if str(o['id']) == exact] if exact else offers))\n"
+                "    if any(p.startswith('id=') for p in args[2].split()):\n"
+                "        print('[]'); raise SystemExit(0)\n"
+                "    machine = next((p.split('=', 1)[1] for p in args[2].split() if p.startswith('machine_id=')), None)\n"
+                "    print(json.dumps([o for o in offers if str(o['machine_id']) == machine] if machine else offers))\n"
                 "elif args[:2] == ['create', 'instance']:\n"
                 "    offer = int(args[2])\n"
                 "    with open(calls, 'a') as handle: handle.write(str(offer) + '\\n')\n"
@@ -290,16 +294,44 @@ class VastProviderTest(unittest.TestCase):
             self.assertEqual(calls.read_text(encoding="utf-8").splitlines(), ["101", "202"])
             self.assertEqual(failed_offers.read_text(encoding="utf-8").splitlines(), ["101"])
 
-    def test_rental_revalidates_the_exact_offer(self) -> None:
+    def test_rental_revalidates_machine_and_checks_offer_locally(self) -> None:
         script = (ROOT / "scripts" / "vast" / "qwen-vast").read_text(encoding="utf-8")
         rental = script.split("rent_offer() {", 1)[1].split("rent_best() {", 1)[0]
-        self.assertIn('search offers "$QUERY_BASE id=$offer_id"', rental)
+        self.assertIn('machine_id=$selected_machine_id', rental)
+        self.assertNotIn('id=$offer_id"', rental)
+        self.assertIn('.id == $offer_id', rental)
 
     def test_retained_wake_does_not_generate_a_slot_replacing_probe(self) -> None:
         script = (ROOT / "scripts" / "vast" / "ensure.sh").read_text(encoding="utf-8")
         resume = script.split("resume_existing() {", 1)[1].split('\nif [[ -n "$old_instance_id" ]]', 1)[0]
         self.assertNotIn("chat_is_ready", resume)
         self.assertIn("model_is_ready && return 0", resume)
+
+    def test_retained_price_is_checked_before_start(self) -> None:
+        script = (ROOT / "scripts" / "vast" / "ensure.sh").read_text(encoding="utf-8")
+        function = "resume_existing() {" + script.split("resume_existing() {", 1)[1].split('\nif [[ -n "$old_instance_id" ]]', 1)[0]
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            fake = root / "vast"
+            started = root / "started"
+            for price, expected in ((0.4, True), (0.8, False), (None, False)):
+                with self.subTest(price=price):
+                    if started.exists():
+                        started.unlink()
+                    fake.write_text(
+                        "#!/usr/bin/env python3\nimport json,sys\n"
+                        f"value={{'id': 123, 'actual_status': 'exited', 'dph_total': {price!r}}}\n"
+                        "if sys.argv[1]=='show': print(json.dumps(value))\n"
+                        f"else: open({str(started)!r}, 'w').write('started'); print('{{}}')\n",
+                        encoding="utf-8")
+                    fake.chmod(0o755)
+                    program = (
+                        f"VASTAI='{fake}'\nPRICE_CAP=0.53\nPROGRESS_COMMAND=true\n"
+                        "QWEN_VAST=true\nmodel_is_ready() { return 0; }\n"
+                        + function + "\nresume_existing 123\n")
+                    result = subprocess.run(["bash", "-c", program], capture_output=True, text=True)
+                    self.assertEqual(result.returncode == 0, expected, result.stderr)
+                    self.assertEqual(started.exists(), expected)
 
     def test_failed_bootstrap_offer_is_excluded_across_pi_retries(self) -> None:
         script = (ROOT / "scripts" / "vast" / "ensure.sh").read_text(encoding="utf-8")

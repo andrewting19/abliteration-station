@@ -4,6 +4,7 @@ import fs from "node:fs";
 import http from "node:http";
 import crypto from "node:crypto";
 import net from "node:net";
+import path from "node:path";
 import { spawn } from "node:child_process";
 
 const listenHost = process.env.ABLITERATION_STATION_PROXY_HOST ?? "127.0.0.1";
@@ -18,6 +19,52 @@ const stopCommand = process.env.ABLITERATION_STATION_STOP_COMMAND ?? "/usr/local
 const ensureCommand = process.env.ABLITERATION_STATION_ENSURE_COMMAND ?? "/usr/local/bin/abliteration-station";
 const configFile = process.env.ABLITERATION_STATION_CONFIG ?? "/etc/abliteration-station/config.json";
 const metricsFile = process.env.ABLITERATION_STATION_METRICS_FILE ?? "/var/lib/abliteration-station/metrics/requests.jsonl";
+const captureNextFile = process.env.ABLITERATION_STATION_CAPTURE_NEXT_FILE;
+let captureAttempted = false;
+
+// Explicit debug opt-in only. Keep sensitive request bodies out of metrics.
+function captureOneRequest(req) {
+  if (!captureNextFile || captureAttempted) return;
+  captureAttempted = true;
+  if (!path.isAbsolute(captureNextFile) || fs.existsSync(captureNextFile)) return;
+  const temporary = `${captureNextFile}.partial`;
+  let descriptor;
+  let size = 0;
+  const discard = () => {
+    if (descriptor === undefined) return;
+    try { fs.closeSync(descriptor); } catch {}
+    descriptor = undefined;
+    try { fs.unlinkSync(temporary); } catch {}
+  };
+  try {
+    fs.mkdirSync(path.dirname(captureNextFile), { recursive: true, mode: 0o700 });
+    descriptor = fs.openSync(temporary, "wx", 0o600);
+  } catch {
+    console.error("Private request capture could not start; inference continues.");
+    return;
+  }
+  req.on("data", (chunk) => {
+    if (descriptor === undefined) return;
+    size += chunk.length;
+    if (size > 32 * 1024 * 1024) { discard(); return; }
+    try { fs.writeSync(descriptor, chunk); } catch { discard(); }
+  });
+  req.once("aborted", discard);
+  req.once("error", discard);
+  req.once("end", () => {
+    if (descriptor === undefined) return;
+    try {
+      fs.closeSync(descriptor);
+      descriptor = undefined;
+      // link fails if the destination exists; never overwrite a prior capture.
+      fs.linkSync(temporary, captureNextFile);
+    } catch {
+      console.error("Private request capture was not saved; inference continues.");
+    } finally {
+      try { fs.unlinkSync(temporary); } catch {}
+    }
+  });
+}
 
 if (!Number.isFinite(idleSeconds) || idleSeconds < (testMode ? 1 : 60)) {
   throw new Error(`ABLITERATION_STATION_IDLE_SECONDS must be at least ${testMode ? 1 : 60}`);
@@ -30,6 +77,15 @@ fs.mkdirSync(new URL(".", `file://${activityFile}`).pathname, { recursive: true 
 fs.mkdirSync(new URL(".", `file://${metricsFile}`).pathname, { recursive: true });
 let activeRequests = 0;
 let lastActivityMs = Date.now();
+try {
+  const savedActivity = JSON.parse(fs.readFileSync(activityFile, "utf8"));
+  if (Number.isFinite(savedActivity.last_activity_unix_ms) &&
+      savedActivity.last_activity_unix_ms > 0 && savedActivity.last_activity_unix_ms <= lastActivityMs) {
+    lastActivityMs = savedActivity.last_activity_unix_ms;
+  }
+} catch {
+  // A first start has no activity record.
+}
 let stoppedActivityMs = null;
 let inhibitUntilMs = 0;
 let stopInFlight = false;
@@ -360,6 +416,7 @@ const server = http.createServer(async (req, res) => {
     }
     finish();
   });
+  if (isInference) captureOneRequest(req);
   req.pipe(upstreamRequest);
 });
 

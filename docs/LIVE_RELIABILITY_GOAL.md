@@ -31,7 +31,10 @@ This does not establish that an actual long-context checkpoint was overwritten.
 
 ## Changes under verification
 
-- Revalidate a selected offer by exact ID rather than another broad search.
+- Revalidate a selected offer on its observed machine, then check its exact ID
+  and price locally. Live checks found that Vast's `id` search filter returned
+  no results for an offer returned by the machine filter. The initial ID-filter
+  change was corrected before release. The corrected rental succeeded.
 - Retain failed bootstrap offer IDs for 30 minutes across Pi retry processes.
 - Report rental failure separately from model-test failure.
 - Preserve current failure details in the proxy error; ignore stale errors.
@@ -70,3 +73,26 @@ qualified test host, or wait until user work is idle, before comparative tests.
 Keep target quantization, temperature, thinking, and tool constraints unchanged.
 The server reports that grammar disables target backend sampling. This is a
 candidate bottleneck, not a measured attribution of all missing throughput.
+
+## Isolated follow-up test
+
+An isolated RTX 5090 with a Ryzen 9700X was secured at $0.4806/hour. It uses
+the same pinned image and is not connected to the production route. A 45-minute
+cleanup timer limits its lifetime. Bootstrap is still in progress; no speed
+result is accepted yet.
+
+An explicit, disabled-by-default one-request capture is available through
+`ABLITERATION_STATION_CAPTURE_NEXT_FILE`. It creates a 0600 file, does not
+overwrite existing captures, and stops capture above 32 MiB. Captures contain
+private request bodies. Keep them outside the repository and remove them after
+the experiment. Normal metrics contain no request body.
+
+The proxy now preserves idle age across restarts. Retained startup also checks
+the current price against the cap before asking Vast to resume compute. The
+machine-specific rental, capture, idle-age, and price changes pass 67 tests and
+the release checks.
+
+The one captured live request had 212,409 input tokens and produced 1,427
+output tokens at 68.84 tokens/s on the production host. It ended with a valid
+tool-calls finish reason. Use this same private payload for the isolated
+comparison; do not substitute a shorter prompt as the acceptance result.

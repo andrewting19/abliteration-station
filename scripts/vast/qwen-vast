@@ -480,8 +480,15 @@ rent_offer() {
   [[ "$confirmation" == "--rent" ]] ||
     die "No rental was made. Add --rent after you review the exact offer and hourly cap."
 
-  local raw price cuda_max image
-  raw=$("$VASTAI" search offers "$QUERY_BASE id=$offer_id" \
+  local raw price cuda_max image offer_query="$QUERY_BASE"
+  local selected_machine_id=${QWEN38_SELECTED_MACHINE_ID:-}
+  if [[ -n "$selected_machine_id" ]]; then
+    [[ "$selected_machine_id" =~ ^[0-9]+$ ]] || die "Selected machine ID must be numeric"
+    offer_query+=" machine_id=$selected_machine_id"
+  fi
+  # Vast's offer id response field is not reliably searchable as `id`.
+  # Narrow by the observed machine, then verify offer identity locally.
+  raw=$("$VASTAI" search offers "$offer_query" \
     --type "$rental_type" --storage 150 --limit 100 -o 'dph+' --raw)
   raw=$(jq --argjson offer_id "$offer_id" --argjson cuda_min "$CUDA_MIN" \
     --argjson min_inet_down "$MIN_INET_DOWN" \
@@ -536,7 +543,7 @@ rent_best() {
   [[ "$confirmation" == "--rent" ]] ||
     die "No rental was made. Add --rent after you review the hourly cap."
 
-  local attempt raw offer_id result rc selector
+  local attempt raw offer_id offer_machine_id result rc selector
   local rent_attempts=${QWEN38_RENT_BEST_ATTEMPTS:-20}
   local failed_offers_file=${QWEN38_FAILED_OFFERS_FILE:-}
   [[ "$rent_attempts" =~ ^[1-9][0-9]*$ ]] || die "QWEN38_RENT_BEST_ATTEMPTS must be a positive integer"
@@ -560,8 +567,10 @@ rent_best() {
       continue
     fi
     echo "Attempt $attempt: offer $offer_id" >&2
+    offer_machine_id=$(jq -r --argjson offer_id "$offer_id" \
+      'map(select(.id == $offer_id))[0].machine_id // empty' <<<"$raw")
     set +e
-    result=$(rent_offer "$offer_id" "$rental_type" "$cap" --rent 2>&1)
+    result=$(QWEN38_SELECTED_MACHINE_ID="$offer_machine_id" rent_offer "$offer_id" "$rental_type" "$cap" --rent 2>&1)
     rc=$?
     set -e
     if [[ $rc -eq 0 ]] && jq -e '.success == true and .new_contract' >/dev/null 2>&1 <<<"$result"; then

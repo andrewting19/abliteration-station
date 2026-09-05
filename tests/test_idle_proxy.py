@@ -94,7 +94,7 @@ class IdleProxyTest(unittest.TestCase):
         self.upstream.server_close()
         self.temp.cleanup()
 
-    def start_proxy(self, ensure_exit: int = 0, *, idle_seconds: int = 60) -> tuple[Path, Path]:
+    def start_proxy(self, ensure_exit: int = 0, *, idle_seconds: int = 60, capture: bool = False) -> tuple[Path, Path]:
         route = self.root / "route.json"
         count = self.root / "ensure-count"
         ensure = self.root / "ensure"
@@ -132,6 +132,10 @@ class IdleProxyTest(unittest.TestCase):
                 "ABLITERATION_STATION_METRICS_FILE": str(self.root / "metrics.jsonl"),
             }
         )
+        if capture:
+            environment["ABLITERATION_STATION_CAPTURE_NEXT_FILE"] = str(self.root / "private" / "capture.json")
+        else:
+            environment.pop("ABLITERATION_STATION_CAPTURE_NEXT_FILE", None)
         self.process = subprocess.Popen(
             [shutil.which("node") or "node", str(PROXY)],
             env=environment,
@@ -311,6 +315,32 @@ class IdleProxyTest(unittest.TestCase):
             time.sleep(0.01)
         record = json.loads(metrics.read_text().splitlines()[-1])
         self.assertEqual(record["error"], "upstream stream ended without finish_reason")
+
+    def test_explicit_capture_is_private_and_does_not_overwrite(self) -> None:
+        self.start_proxy(capture=True)
+        self.request()
+        capture = self.root / "private" / "capture.json"
+        self.assertTrue(capture.exists())
+        self.assertEqual(capture.stat().st_mode & 0o777, 0o600)
+        original = capture.read_bytes()
+        self.request()
+        self.assertEqual(capture.read_bytes(), original)
+        self.assertFalse(Path(str(capture) + ".partial").exists())
+
+    def test_default_does_not_capture_requests(self) -> None:
+        self.start_proxy()
+        self.request()
+        self.assertFalse((self.root / "private").exists())
+
+    def test_restart_preserves_idle_age(self) -> None:
+        previous = int(time.time() * 1000) - 10000
+        (self.root / "activity.json").write_text(json.dumps({
+            "last_activity_unix_ms": previous}), encoding="utf-8")
+        self.start_proxy()
+        with urllib.request.urlopen(f"http://127.0.0.1:{self.proxy_port}/healthz", timeout=2) as response:
+            health = json.load(response)
+        self.assertEqual(health["last_activity_unix_ms"], previous)
+        self.assertGreaterEqual(health["idle_seconds"], 10)
 
     def test_client_cancellation_closes_upstream(self) -> None:
         route = self.root / "route.json"
