@@ -250,3 +250,10 @@ Before installation, require numerical backend tests with nonzero case counts,
 then uninstrumented A/B runs on the copied 196K and 201K Pi requests. Keep the
 production runtime unchanged until correctness and performance pass. The full
 live Pi lifecycle gates remain incomplete.
+
+The first compiler run failed at test-executable linking, not during a GPU
+test. The CPU-only runner could not resolve `libcuda.so.1`. Commit 3f5a13c adds
+a build-only driver-stub search path. Replacement run 33962877786 is active;
+no candidate has passed numerical or real-request performance gates yet.
+Local release checks passed 85 tests with two Linux-only skips. Both skipped
+probe tests passed separately on Kevin with the exact engine headers.

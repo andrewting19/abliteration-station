@@ -2,7 +2,7 @@
 
 This is an experiment, not an accepted runtime.
 
-1. Download artifact `iq-mmq-candidate` from Actions run 33961758359 after it
+1. Download artifact `iq-mmq-candidate` from Actions run 33962877786 after it
    succeeds. Check BUILD_INFO, source tree, compiler, and SHA256SUMS.
 2. Use one isolated RTX 5090 worker under the configured rental cap. Set its
    cleanup deadline before starting tests. Do not change the production route.
@@ -31,3 +31,9 @@ This is an experiment, not an accepted runtime.
 6. Require the real long-output performance gate, then test the live Pi path.
    Backend microbenchmarks do not satisfy sustained agentic TPS or lifecycle
    requirements. Keep all unmet gates open and remove the test deployment.
+
+Build history: run 33961758359 compiled the baseline CUDA library but failed
+when linking the test executable: the CPU runner had no `libcuda.so.1` driver.
+Commit 3f5a13c adds a link-only SONAME alias to the toolkit driver stub. The
+stub is not packaged and is not added to the runtime search path. Replacement
+run 33962877786 must still pass before its output can be used.
