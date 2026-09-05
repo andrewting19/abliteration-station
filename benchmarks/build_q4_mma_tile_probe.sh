@@ -22,9 +22,15 @@ if nm -D --undefined-only "$artifact" | c++filt | grep -q 'qwen_experimental_q4_
   exit 1
 fi
 done
+nvcc -O3 -lineinfo --use_fast_math -std=c++17 -arch=sm_120a \
+  -DGGML_CUDA_USE_GRAPHS --cudart shared \
+  -Xcompiler -fPIC,-fvisibility=hidden,-fvisibility-inlines-hidden -shared \
+  -I"$task_dir/source/ggml/include" -I"$task_dir/source/ggml/src" \
+  "$project/benchmarks/q4_conversion_probe.cu" -o "$output/q4-conversion-probe.so"
 {
   printf 'base_commit=%s\ncompile_only=true\n' "$QWEN38_LLAMA_BASE_COMMIT"
   nvcc --version
   sha256sum "$project/patches/experimental-q4-mma-tile.patch" \
-    "$project/benchmarks/qwen-q4-tile.cuh" "$project/benchmarks/q4_mma_tile_probe.cu" "$output/"*.so
+    "$project/benchmarks/qwen-q4-tile.cuh" "$project/benchmarks/q4_mma_tile_probe.cu" \
+    "$project/benchmarks/q4_conversion_probe.cu" "$output/"*.so
 } > "$output/BUILD_INFO.txt"

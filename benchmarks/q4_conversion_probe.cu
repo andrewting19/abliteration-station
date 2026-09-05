@@ -9,9 +9,10 @@ __global__ void qwen_q4_contiguous_half2(const block_q4_0 * source, half2 * outp
     const int within=element%32;
     const int shift=within>=16 ? 4 : 0;
     const float d=__half2float(block.d);
+    const float dm=-8*d;
     const int lo=(block.qs[within%16]>>shift)&15;
     const int hi=(block.qs[(within+1)%16]>>shift)&15;
-    output[pair]=__floats2half2_rn(d*float(lo-8),d*float(hi-8));
+    output[pair]=__floats2half2_rn(d*float(lo)+dm,d*float(hi)+dm);
 }
 
 static void qwen_convert_q4(const void * source, half * output, int64_t count, cudaStream_t stream) {
