@@ -481,7 +481,7 @@ rent_offer() {
     die "No rental was made. Add --rent after you review the exact offer and hourly cap."
 
   local raw price cuda_max image
-  raw=$("$VASTAI" search offers "$QUERY_BASE" \
+  raw=$("$VASTAI" search offers "$QUERY_BASE id=$offer_id" \
     --type "$rental_type" --storage 150 --limit 100 -o 'dph+' --raw)
   raw=$(jq --argjson offer_id "$offer_id" --argjson cuda_min "$CUDA_MIN" \
     --argjson min_inet_down "$MIN_INET_DOWN" \

@@ -251,7 +251,8 @@ class VastProviderTest(unittest.TestCase):
                 f"offers = {offers!r}\n"
                 "args = sys.argv[1:]\n"
                 "if args[:2] == ['search', 'offers']:\n"
-                "    print(json.dumps(offers))\n"
+                "    exact = next((p.split('=', 1)[1] for p in args[2].split() if p.startswith('id=')), None)\n"
+                "    print(json.dumps([o for o in offers if str(o['id']) == exact] if exact else offers))\n"
                 "elif args[:2] == ['create', 'instance']:\n"
                 "    offer = int(args[2])\n"
                 "    with open(calls, 'a') as handle: handle.write(str(offer) + '\\n')\n"
@@ -288,6 +289,24 @@ class VastProviderTest(unittest.TestCase):
             self.assertEqual(json.loads(result.stdout)["offer_id"], 202)
             self.assertEqual(calls.read_text(encoding="utf-8").splitlines(), ["101", "202"])
             self.assertEqual(failed_offers.read_text(encoding="utf-8").splitlines(), ["101"])
+
+    def test_rental_revalidates_the_exact_offer(self) -> None:
+        script = (ROOT / "scripts" / "vast" / "qwen-vast").read_text(encoding="utf-8")
+        rental = script.split("rent_offer() {", 1)[1].split("rent_best() {", 1)[0]
+        self.assertIn('search offers "$QUERY_BASE id=$offer_id"', rental)
+
+    def test_retained_wake_does_not_generate_a_slot_replacing_probe(self) -> None:
+        script = (ROOT / "scripts" / "vast" / "ensure.sh").read_text(encoding="utf-8")
+        resume = script.split("resume_existing() {", 1)[1].split('\nif [[ -n "$old_instance_id" ]]', 1)[0]
+        self.assertNotIn("chat_is_ready", resume)
+        self.assertIn("model_is_ready && return 0", resume)
+
+    def test_failed_bootstrap_offer_is_excluded_across_pi_retries(self) -> None:
+        script = (ROOT / "scripts" / "vast" / "ensure.sh").read_text(encoding="utf-8")
+        self.assertIn("failed-bootstrap-offers.tsv", script)
+        self.assertIn("now-$1 < ttl", script)
+        self.assertIn('>>"$FAILED_HOSTS_FILE"', script)
+        self.assertIn('tr', script)
 
     def test_cuda_13_0_offer_uses_matching_base_image(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

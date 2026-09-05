@@ -17,8 +17,13 @@ USE_PROVIDER_COPY=${QWEN38_USE_PROVIDER_COPY:-0}
 ALLOW_CUDA_13_0_FALLBACK=${QWEN38_ALLOW_CUDA_13_0_FALLBACK:-1}
 FRESH_RENTAL_ATTEMPTS=${QWEN38_FRESH_RENTAL_ATTEMPTS:-3}
 OFFER_ACQUIRE_ATTEMPTS=${QWEN38_OFFER_ACQUIRE_ATTEMPTS:-5}
+FAILED_HOSTS_FILE=${QWEN38_FAILED_HOSTS_FILE:-/var/lib/abliteration-station/failed-bootstrap-offers.tsv}
+FAILED_HOST_TTL=${QWEN38_FAILED_HOST_TTL_SECONDS:-1800}
 
 die() {
+  if [[ -x "$PROGRESS_COMMAND" ]]; then
+    "$PROGRESS_COMMAND" failed "$*" 0 >/dev/null || true
+  fi
   echo "Abliteration Station start failed: $*" >&2
   exit 1
 }
@@ -118,7 +123,9 @@ resume_existing() {
 
   "$QWEN_VAST" resume "$instance_id" >&2 || return 1
   for _ in $(seq 1 90); do
-    model_is_ready && chat_is_ready && return 0
+    # A generation probe replaces the user's slot. The exact retained runtime
+    # is checked by resume; let the user's request verify generation.
+    model_is_ready && return 0
     sleep 2
   done
   return 1
@@ -137,6 +144,10 @@ fi
 
 rollback_new_instance() {
   local failed_instance_id=$1
+  # Keep a bounded rejection across Pi retries, not just this shell process.
+  if [[ "${offer_id:-}" =~ ^[0-9]+$ ]]; then
+    printf '%s\t%s\n' "$(date +%s)" "$offer_id" >>"$FAILED_HOSTS_FILE"
+  fi
   echo "Stopping and removing failed fresh instance $failed_instance_id." >&2
   $VASTAI stop instance "$failed_instance_id" --raw >/dev/null 2>&1 || true
   $VASTAI destroy instance "$failed_instance_id" --yes --raw >/dev/null 2>&1 || true
@@ -153,6 +164,16 @@ rollback_new_instance() {
   die "QWEN38_OFFER_ACQUIRE_ATTEMPTS must be a positive integer"
 
 excluded_offer_ids=""
+if [[ -r "$FAILED_HOSTS_FILE" ]]; then
+  [[ "$FAILED_HOST_TTL" =~ ^[1-9][0-9]*$ ]] || die "Failed-host TTL must be a positive integer"
+  excluded_offer_ids=$(awk -v now="$(date +%s)" -v ttl="$FAILED_HOST_TTL" \
+    '$1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ && now-$1 < ttl {print $2}' \
+    "$FAILED_HOSTS_FILE" | sort -nu | paste -sd, -)
+  if [[ -n "$excluded_offer_ids" ]]; then
+    tr ',' '\n' <<<"$excluded_offer_ids" >>"$failed_offers_file"
+  fi
+fi
+secured_any_instance=0
 for rental_attempt in $(seq 1 "$FRESH_RENTAL_ATTEMPTS"); do
   "$PROGRESS_COMMAND" replacement_select "Selecting replacement RTX 5090, attempt $rental_attempt of $FRESH_RENTAL_ATTEMPTS" 30
   echo "Rental attempt $rental_attempt of $FRESH_RENTAL_ATTEMPTS: selecting one verified RTX 5090 below \$$PRICE_CAP per hour..." >&2
@@ -183,6 +204,7 @@ for rental_attempt in $(seq 1 "$FRESH_RENTAL_ATTEMPTS"); do
     echo "Vast did not return a valid instance and offer ID." >&2
     continue
   fi
+  secured_any_instance=1
   if [[ -n "$excluded_offer_ids" ]]; then
     excluded_offer_ids+=",$offer_id"
   else
@@ -250,4 +272,7 @@ for rental_attempt in $(seq 1 "$FRESH_RENTAL_ATTEMPTS"); do
   rollback_new_instance "$new_instance_id"
 done
 
-die "$FRESH_RENTAL_ATTEMPTS fresh RTX 5090 rental attempts failed the private Q3/262K chat gate"
+if (( secured_any_instance == 0 )); then
+  die "No compatible RTX 5090 could be rented within the hourly cap of $PRICE_CAP. No model test ran."
+fi
+die "$FRESH_RENTAL_ATTEMPTS fresh RTX 5090 rental attempts failed during bootstrap or model checks"

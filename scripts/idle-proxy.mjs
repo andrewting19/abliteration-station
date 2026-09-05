@@ -146,6 +146,8 @@ async function ensureRoute() {
   if (ensureInFlight === null) {
     ensureInFlight = (async () => {
       if (stopPromise !== null) await stopPromise;
+      const wakeStartedMs = Date.now();
+      lastWakeError = null;
       const child = spawn(ensureCommand, ["--config", configFile, "ensure"], {
         stdio: ["ignore", "ignore", "inherit"],
       });
@@ -153,7 +155,15 @@ async function ensureRoute() {
         child.once("exit", resolve);
         child.once("error", reject);
       });
-      if (code !== 0) throw new Error(`model wake command exited with status ${code}`);
+      if (code !== 0) {
+        const progress = readProgress();
+        const currentFailure = progress?.phase === "failed" &&
+          progress.phase_started_unix_ms >= wakeStartedMs &&
+          typeof progress.message === "string";
+        throw new Error(currentFailure
+          ? progress.message.slice(0, 500)
+          : `model wake command exited with status ${code}`);
+      }
       const route = readRoute();
       lastWakeError = null;
       return route;
@@ -221,6 +231,8 @@ const server = http.createServer(async (req, res) => {
     wake_seconds: null,
     upstream_headers_seconds: null,
     first_response_byte_seconds: null,
+    first_token_seconds: null,
+    finish_reason: null,
     total_seconds: null,
     status: null,
     response_bytes: 0,
@@ -265,6 +277,10 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   if (req.destroyed || res.destroyed) {
+    if (metric !== null) {
+      metric.cancelled = true;
+      metric.error = "client disconnected while waiting for model wake";
+    }
     finish();
     return;
   }
@@ -297,6 +313,14 @@ const server = http.createServer(async (req, res) => {
         if (!value || value === "[DONE]") continue;
         try {
           const event = JSON.parse(value);
+          for (const choice of event.choices ?? []) {
+            if (choice.finish_reason != null) metric.finish_reason = choice.finish_reason;
+            const delta = choice.delta ?? {};
+            const hasToken = [delta.content, delta.reasoning_content, delta.reasoning]
+              .some((text) => typeof text === "string" && text.length > 0) ||
+              (Array.isArray(delta.tool_calls) && delta.tool_calls.length > 0);
+            if (hasToken && metric.first_token_seconds === null) metric.first_token_seconds = elapsedSeconds();
+          }
           if (event.usage && typeof event.usage === "object") metric.usage = event.usage;
           if (event.timings && typeof event.timings === "object") metric.timings = event.timings;
         } catch {
@@ -304,8 +328,18 @@ const server = http.createServer(async (req, res) => {
         }
       }
     });
-    upstreamResponse.on("end", finish);
-    upstreamResponse.on("error", finish);
+    upstreamResponse.on("end", () => {
+      const isChatStream = metric?.endpoint === "/v1/chat/completions" &&
+        String(upstreamResponse.headers["content-type"] ?? "").includes("text/event-stream");
+      if (isChatStream && metric.status === 200 && metric.finish_reason === null && !metric.cancelled) {
+        metric.error = "upstream stream ended without finish_reason";
+      }
+      finish();
+    });
+    upstreamResponse.on("error", (error) => {
+      if (metric !== null) metric.error = `upstream response failed: ${error.message}`;
+      finish();
+    });
     upstreamResponse.pipe(res);
   });
   upstreamRequest.setTimeout(7_200_000, () => upstreamRequest.destroy(new Error("upstream timed out")));

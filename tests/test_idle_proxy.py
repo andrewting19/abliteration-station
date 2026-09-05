@@ -33,6 +33,17 @@ class UpstreamHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         length = int(self.headers.get("Content-Length", "0"))
         self.rfile.read(length)
+        if self.headers.get("X-Test-Stream") in ("1", "missing-finish"):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.end_headers()
+            self.wfile.write(b'data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n')
+            self.wfile.flush()
+            time.sleep(0.1)
+            self.wfile.write(b'data: {"choices":[{"delta":{"content":"private-test-text"}}]}\n\n')
+            if self.headers.get("X-Test-Stream") != "missing-finish":
+                self.wfile.write(b'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n')
+            return
         body = b'{"ok":true}'
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -63,6 +74,7 @@ class IdleProxyTest(unittest.TestCase):
         unit = SERVICE.read_text(encoding="utf-8")
         self.assertIn("Environment=TMPDIR=/run/abliteration-station", unit)
         self.assertIn("RuntimeDirectory=abliteration-station", unit)
+        self.assertIn("RuntimeDirectoryPreserve=restart", unit)
         self.assertIn("ABLITERATION_STATION_PROGRESS_FILE", unit)
 
     def setUp(self) -> None:
@@ -206,6 +218,32 @@ class IdleProxyTest(unittest.TestCase):
             self.assertEqual(lifecycle["phase"], "retained_wait")
             future.result()
 
+    def test_wake_failure_reports_current_phase_failure(self) -> None:
+        self.start_proxy(ensure_exit=7)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(self.request)
+            count = self.root / "ensure-count"
+            deadline = time.monotonic() + 2
+            while not count.exists() and time.monotonic() < deadline:
+                time.sleep(0.01)
+            (self.root / "progress.json").write_text(json.dumps({
+                "phase": "failed", "message": "No compatible GPU within the price cap",
+                "phase_started_unix_ms": int(time.time() * 1000),
+            }), encoding="utf-8")
+            with self.assertRaises(urllib.error.HTTPError) as caught:
+                future.result(timeout=3)
+            self.assertIn("No compatible GPU within the price cap", caught.exception.read().decode())
+
+    def test_wake_failure_does_not_report_stale_phase_failure(self) -> None:
+        (self.root / "progress.json").write_text(json.dumps({
+            "phase": "failed", "message": "Old failure",
+            "phase_started_unix_ms": 1,
+        }), encoding="utf-8")
+        self.start_proxy(ensure_exit=7)
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            self.request()
+        self.assertNotIn("Old failure", caught.exception.read().decode())
+
     def test_healthy_route_clears_reported_wake_error(self) -> None:
         self.start_proxy(ensure_exit=7)
         with self.assertRaises(urllib.error.HTTPError):
@@ -233,7 +271,7 @@ class IdleProxyTest(unittest.TestCase):
         self.assertGreater(record["response_bytes"], 0)
         serialized = json.dumps(record)
         self.assertNotIn("qwen38-cloud", serialized)
-        self.assertNotIn("ok", serialized)
+        self.assertNotIn('"ok"', serialized)
 
     def test_idle_route_is_stopped_once(self) -> None:
         _count, stop_count = self.start_proxy(idle_seconds=1)
@@ -243,6 +281,36 @@ class IdleProxyTest(unittest.TestCase):
         self.assertTrue(stop_count.exists())
         time.sleep(0.4)
         self.assertEqual(stop_count.read_text(encoding="utf-8"), "x")
+
+    def test_first_token_excludes_role_only_event(self) -> None:
+        self.start_proxy()
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{self.proxy_port}/v1/chat/completions",
+            data=b'{}', headers={"X-Test-Stream": "1"})
+        with urllib.request.urlopen(request, timeout=5) as response:
+            response.read()
+        metrics = self.root / "metrics.jsonl"
+        deadline = time.monotonic() + 2
+        while not metrics.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        record = json.loads(metrics.read_text().splitlines()[-1])
+        self.assertGreater(record["first_token_seconds"] - record["first_response_byte_seconds"], 0.05)
+        self.assertEqual(record["finish_reason"], "stop")
+        self.assertNotIn("private-test-text", metrics.read_text())
+
+    def test_incomplete_stream_is_not_counted_as_success(self) -> None:
+        self.start_proxy()
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{self.proxy_port}/v1/chat/completions",
+            data=b'{}', headers={"X-Test-Stream": "missing-finish"})
+        with urllib.request.urlopen(request, timeout=5) as response:
+            response.read()
+        metrics = self.root / "metrics.jsonl"
+        deadline = time.monotonic() + 2
+        while not metrics.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        record = json.loads(metrics.read_text().splitlines()[-1])
+        self.assertEqual(record["error"], "upstream stream ended without finish_reason")
 
     def test_client_cancellation_closes_upstream(self) -> None:
         route = self.root / "route.json"

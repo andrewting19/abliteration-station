@@ -215,6 +215,9 @@ class Controller:
                 and state.get("identity") == route.identity
             )
             if not same_instance:
+                artifact = state.get("artifact")
+                if not isinstance(artifact, dict):
+                    raise LifecycleError("checkpoint is local to another instance; using cold prefill")
                 runtime_method = getattr(provider, "runtime_fingerprint", None)
                 if not callable(runtime_method):
                     raise LifecycleError(f"provider {route.provider} cannot identify its live runtime")
@@ -225,9 +228,6 @@ class Controller:
                 import_cache = getattr(provider, "import_cache", None)
                 if not callable(import_cache):
                     raise LifecycleError(f"provider {route.provider} cannot import a portable cache")
-                artifact = state.get("artifact")
-                if not isinstance(artifact, dict):
-                    raise LifecycleError("portable cache metadata is missing")
                 import_cache(route, str(state["filename"]), self._cache_artifact_directory(), artifact)
             slot_id = int(cache.get("slot_id", 0))
             response = self._request_json(

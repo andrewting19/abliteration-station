@@ -383,6 +383,26 @@ class ControllerTest(unittest.TestCase):
             import_cache.assert_not_called()
             request.assert_not_called()
 
+    def test_other_instance_local_cache_skips_remote_fingerprint(self):
+        with tempfile.TemporaryDirectory() as temp:
+            state = Path(temp) / "state.json"
+            controller = Controller({
+                "model": {"id": "qwen38-cloud", "context_size": 262144},
+                "kv_cache": {"enabled": True, "state_file": str(state)},
+            })
+            state.write_text(json.dumps({
+                "fingerprint": controller._cache_fingerprint(),
+                "provider": "vast", "identity": {"instance_id": "old"},
+                "storage": "provider-local", "filename": "pi.slot",
+            }), encoding="utf-8")
+            provider = FakeProvider("vast", None)
+            with patch("abliteration_station.controller.make_provider", return_value=provider), \
+                 patch.object(provider, "runtime_fingerprint") as fingerprint:
+                self.assertFalse(controller.restore_cache(
+                    Route("vast", "http://vast.test", {"instance_id": "new"})))
+            fingerprint.assert_not_called()
+            self.assertTrue(state.is_file())
+
     def test_same_instance_restore_uses_saved_runtime_identity(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
