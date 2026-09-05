@@ -311,6 +311,20 @@ verified. Production remains unchanged, and all agentic speed gates remain open.
 
 ## Full-library and real-request results
 
+Later fused tensor-core prototype: after isolating its symbols and using the
+shared CUDA runtime, it passed 22 numerical cases and completed the real 201K
+request at 57.02 TPS (2037 output tokens). The same-host baseline measured
+67.67 TPS (1004 output tokens). This prototype is not an accepted speed fix.
+An earlier library-resource-handle failure produced no valid speed result.
+
+The smaller query-tile variant passed one targeted 200K numerical case, but
+its real replay result was not collected before the bounded cleanup removed
+instance 49972446 at 15:52 UTC. Treat its speed as unknown. Deletion was verified.
+The baseline and first prototype summaries remain on Kevin under
+`benchmarks/private/q4-mma-results`. Future replays must write their summary
+directly to the controller, and must not start if insufficient cleanup time
+remains. The goal is still incomplete; no inference candidate was promoted.
+
 Full build 33967291510 passed. On isolated instance 49964346, both libraries
 passed 130/130 numerical tests. At 196,442 context tokens, fixed baseline decoded
 3,076 tokens at 52.04 TPS; the dispatch candidate decoded 808 at 53.80 TPS. At
