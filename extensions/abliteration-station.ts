@@ -5,7 +5,12 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 
 const STATUS_KEY = "abliteration-station-wake";
 const WIDGET_KEY = "abliteration-station-wake";
-const HEALTH_URL = process.env.ABLITERATION_STATION_HEALTH_URL ?? "http://127.0.0.1:17072/healthz";
+const LOCAL_PORT = Number(process.env.ABLITERATION_STATION_LOCAL_PORT ?? "17072");
+if (!Number.isInteger(LOCAL_PORT) || LOCAL_PORT < 1 || LOCAL_PORT > 65535) {
+  throw new Error("ABLITERATION_STATION_LOCAL_PORT must be an integer from 1 to 65535");
+}
+const LOCAL_URL = `http://127.0.0.1:${LOCAL_PORT}`;
+const HEALTH_URL = process.env.ABLITERATION_STATION_HEALTH_URL ?? `${LOCAL_URL}/healthz`;
 const CONFIG_FILE = process.env.ABLITERATION_STATION_CONFIG ?? "/etc/abliteration-station/config.json";
 const CLI = process.env.ABLITERATION_STATION_CLI ?? "/usr/local/bin/abliteration-station";
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -60,7 +65,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerProvider("abliteration-station", {
     name: "Abliteration Station",
-    baseUrl: "http://127.0.0.1:17072/v1",
+    baseUrl: `${LOCAL_URL}/v1`,
     apiKey: "!/usr/local/lib/abliteration-station/vast/inference-key",
     authHeader: true,
     api: "openai-completions",
