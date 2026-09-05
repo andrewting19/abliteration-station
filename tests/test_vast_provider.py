@@ -198,6 +198,16 @@ class VastProviderTest(unittest.TestCase):
         self.assertIn("cpu_ram>=32", script)
         self.assertNotIn("cpu_ram>=48", script)
 
+    def test_selector_duration_is_configurable_and_rejects_query_injection(self) -> None:
+        script = ROOT / "scripts" / "vast" / "qwen-vast"
+        source = script.read_text()
+        self.assertIn('MIN_DURATION_DAYS=${QWEN38_MIN_DURATION_DAYS:-1}', source)
+        self.assertIn('duration>=$MIN_DURATION_DAYS', source)
+        for value in ("0", "-1", "1 rentable=False", "1;true"):
+            result = subprocess.run(["bash", str(script)], env=dict(os.environ, QWEN38_MIN_DURATION_DAYS=value), capture_output=True, text=True)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("positive integer", result.stderr)
+
     def test_launcher_supports_target_only_and_backend_sampling(self) -> None:
         launcher = (ROOT / "scripts" / "vast" / "run-qwen38-cloud.sh").read_text(
             encoding="utf-8"

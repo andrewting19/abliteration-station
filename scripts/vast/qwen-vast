@@ -7,7 +7,12 @@ VASTAI=${VASTAI:-$SCRIPT_DIR/.vast-venv/bin/vastai}
 SSH_KEY=${QWEN38_SSH_KEY:-$HOME/.ssh/abliteration-station-vast}
 INSTANCE_FILE=${ABLITERATION_STATION_INSTANCE_FILE:-/var/lib/abliteration-station/vast-instance-id}
 PROGRESS_COMMAND=${ABLITERATION_STATION_PROGRESS_COMMAND:-/usr/local/bin/abliteration-station-progress}
-QUERY_BASE='gpu_name=RTX_5090 num_gpus=1 verified=True rentable=True reliability>=0.98 direct_port_count>=1 cpu_ram>=32 disk_space>=150 cuda_vers>=13 dlperf>=190 duration>=30'
+MIN_DURATION_DAYS=${QWEN38_MIN_DURATION_DAYS:-1}
+[[ "$MIN_DURATION_DAYS" =~ ^[1-9][0-9]*$ ]] || {
+  echo "QWEN38_MIN_DURATION_DAYS must be a positive integer" >&2
+  exit 2
+}
+QUERY_BASE="gpu_name=RTX_5090 num_gpus=1 verified=True rentable=True reliability>=0.98 direct_port_count>=1 cpu_ram>=32 disk_space>=150 cuda_vers>=13 dlperf>=190 duration>=$MIN_DURATION_DAYS"
 CUDA_MIN=${QWEN38_CUDA_MIN:-13.2}
 RUNTIME_IMAGE=${QWEN38_RUNTIME_IMAGE:-ghcr.io/andrewting19/abliteration-station-runtime@sha256:1d0692fca38c29173bb24c62ce61faca667cf3d9126ed1936724bf3f1e16490a}
 MIN_INET_DOWN=${QWEN38_MIN_INET_DOWN:-0}
