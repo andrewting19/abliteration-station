@@ -15,6 +15,8 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-24.04
+    outputs:
+      digest: ${{ steps.build_image.outputs.digest }}
     steps:
       - uses: actions/checkout@v5
       - name: Free build disk
@@ -58,3 +60,18 @@ jobs:
         run: |
           [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           printf 'IMAGE_DIGEST=%s\n' "$IMAGE_DIGEST"
+  check_host_keys:
+    needs: publish
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v5
+      - name: Free image-test disk
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+      - name: Check fresh and retained SSH host keys
+        env:
+          IMAGE: ghcr.io/andrewting19/abliteration-station-runtime@${{ needs.publish.outputs.digest }}
+        run: bash benchmarks/check_image_host_keys.sh "$IMAGE"

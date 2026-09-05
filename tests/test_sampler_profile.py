@@ -56,3 +56,5 @@ int main() {
             self.assertEqual(report["chain_calls"], 20)
             self.assertGreater(report["grammar_ms"], 0)
             self.assertGreater(report["chain_ms"], 0)
+            self.assertGreater(report["grammar_ms"], report["grammar_cpu_ms"])
+            self.assertGreater(report["chain_ms"], report["chain_cpu_ms"])

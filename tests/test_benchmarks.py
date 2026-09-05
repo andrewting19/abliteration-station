@@ -30,6 +30,7 @@ ANALYZE = load("analyze_results", ROOT / "benchmarks" / "analyze_results.py")
 PROXY_SUMMARY = load("summarize_proxy_metrics", ROOT / "benchmarks" / "summarize_proxy_metrics.py")
 REPLAY = load("replay_captured_pi", ROOT / "scripts" / "vast" / "replay_captured_pi.py")
 RECONSTRUCT = load("reconstruct_pi_request", ROOT / "benchmarks" / "reconstruct_pi_request.py")
+LAYERS = load("check_layer_reuse", ROOT / "benchmarks" / "check_layer_reuse.py")
 
 
 class StreamHandler(BaseHTTPRequestHandler):
@@ -62,6 +63,13 @@ class StreamHandler(BaseHTTPRequestHandler):
 
 
 class BenchmarkTest(unittest.TestCase):
+    def test_layer_reuse_rejects_changed_model_layers(self) -> None:
+        original = {"layers": [{"digest": "model-a", "size": 2000000000}]}
+        self.assertTrue(LAYERS.compare(original, original)["all_large_layers_reused"])
+        changed = {"layers": [{"digest": "model-b", "size": 2000000000}]}
+        self.assertEqual(LAYERS.compare(original, changed)["changed_large_layer_bytes"], 2000000000)
+        self.assertFalse(LAYERS.compare({"layers": []}, {"layers": []})["all_large_layers_reused"])
+
     def test_draft_variant_does_not_change_target_or_sampling(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

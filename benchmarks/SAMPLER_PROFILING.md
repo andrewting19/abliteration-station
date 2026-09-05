@@ -25,6 +25,8 @@ Interpretation:
 - Grammar time includes active validation and cheap inactive-lazy checks.
 - Chain time includes the work of nested sampler components. Do not add
   nested measurements as if they were independent time intervals.
+- CPU-time fields use the calling thread's CPU clock. Compare them with
+  elapsed time to distinguish CPU work from waits or descheduling.
 - The measurements do not cover tokenization, model GPU execution, or all
   server bookkeeping. Low measured time rejects the hypothesis that this
   part explains most of the missing throughput.
