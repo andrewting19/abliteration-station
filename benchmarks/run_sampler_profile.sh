@@ -28,8 +28,16 @@ for attempt in $(seq 1 90); do
   sleep 1
 done
 [[ "$ready" == 1 ]] || { echo "Profile model did not become ready." >&2; exit 1; }
+profile_pid=$(supervisorctl pid qwen38-profile)
+[[ "$profile_pid" =~ ^[1-9][0-9]*$ ]] || exit 1
 python3 "$directory/replay_captured_pi.py" "$capture" --stream --max-tokens 4096 --seed 424242
 supervisorctl stop qwen38-profile >/dev/null
 current_reports=$(grep -c 'QWEN_SAMPLER_PROFILE ' /var/log/portal/qwen38-profile.err.log 2>/dev/null || true)
 (( ${current_reports:-0} > previous_reports )) || { echo "The run did not produce a new sampler report." >&2; exit 1; }
-grep 'QWEN_SAMPLER_PROFILE ' /var/log/portal/qwen38-profile.err.log | tail -1
+grep -E '^QWEN_(SAMPLER|DECODE|STATE|READ|SYNC)_PROFILE ' /var/log/portal/qwen38-profile.err.log |
+  sed 's/^[^ ]* //' |
+  jq -cs --argjson pid "$profile_pid" --argjson require_decode "${QWEN38_REQUIRE_DECODE_PROFILE:-0}" '
+    map(select(.pid == $pid)) |
+    if any(.[]; .kind == "sampler") and
+       ($require_decode == 0 or (any(.[]; .kind == "decode" and .role == "target") and any(.[]; .kind == "decode" and .role == "draft")))
+    then .[] else error("Required reports are missing for this process") end'

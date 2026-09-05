@@ -221,3 +221,32 @@ Next, measure target versus draft decode calls and recurrent-state replay or
 copy work. Inspect small speculative-batch CUDA dispatch before choosing a
 kernel change. Keep target weights, sampling, and verification semantics fixed
 for the first measurements. The 80 TPS and full live Pi wake gates remain open.
+
+## Target verification profile and next kernel test (2026-09-05)
+
+The full forwarding probe replayed the same 196,442-token request. It produced
+3,076 tokens at 53.41 TPS, with matching content and reasoning hashes and a
+`tool_calls` finish. The private evidence file on Kevin is
+`benchmarks/private/sampler-profile/sync-196442.log` under the service state
+directory. The test worker was deleted after collection.
+
+Of 57,571 ms decode time, 1,312 target batch-seven synchronization calls used
+51,007 ms (about 89%). The sampler excluding synchronization used 548 ms.
+Draft next-token readback used 2,730 ms. API decode calls are asynchronous;
+their return times alone do not measure completed GPU work. CUDA stream waits
+can use CPU time while they wait. This result does not show a CPU arithmetic
+bottleneck. State-copy records did not show a generation replay storm.
+
+The next candidate changes only Blackwell IQ-format dispatch for batches five
+through eight from the vector kernel to the existing matrix kernel. The target
+file contains mostly IQ-format weights despite its Q3_K_XL label. Batch-seven
+verification is therefore a relevant case. Single-token dispatch, target
+weights, draft weights, sampling, and verification rules remain unchanged.
+
+Actions run 33961758359 builds paired baseline and candidate CUDA libraries
+from the exact deployed source with the same compiler. This is a CPU-only
+build; no GPU is rented while it compiles. No speed gain is established yet.
+Before installation, require numerical backend tests with nonzero case counts,
+then uninstrumented A/B runs on the copied 196K and 201K Pi requests. Keep the
+production runtime unchanged until correctness and performance pass. The full
+live Pi lifecycle gates remain incomplete.
