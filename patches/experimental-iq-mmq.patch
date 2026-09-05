@@ -1,0 +1,20 @@
+diff --git a/ggml/src/ggml-cuda/mmvq.cu b/ggml/src/ggml-cuda/mmvq.cu
+index 2be2f2491..d32e9a641 100644
+--- a/ggml/src/ggml-cuda/mmvq.cu
++++ b/ggml/src/ggml-cuda/mmvq.cu
+@@ -307,6 +307,15 @@ bool ggml_cuda_should_use_mmvq(enum ggml_type type, int cc, int64_t ne11) {
+     }
+     if (GGML_CUDA_CC_IS_NVIDIA(cc) && cc == GGML_CUDA_CC_BLACKWELL) {
+         switch (type) { // tuned on RTX 5090
++            // Experimental IQ cutoff for small verification batches.
++            case GGML_TYPE_IQ2_XXS:
++            case GGML_TYPE_IQ2_XS:
++            case GGML_TYPE_IQ2_S:
++            case GGML_TYPE_IQ3_XXS:
++            case GGML_TYPE_IQ3_S:
++            case GGML_TYPE_IQ4_XS:
++            case GGML_TYPE_IQ4_NL:
++                return ne11 <= 4;
+             case GGML_TYPE_Q2_K:
+             case GGML_TYPE_Q3_K:
+             case GGML_TYPE_Q4_K:

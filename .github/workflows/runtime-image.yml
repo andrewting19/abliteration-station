@@ -2,6 +2,12 @@ name: Runtime image
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Artifact to build
+        type: choice
+        default: image
+        options: [image, cuda-iq-mmq]
   push:
     branches: [main]
     paths:
@@ -14,6 +20,7 @@ permissions:
 
 jobs:
   publish:
+    if: github.event_name != 'workflow_dispatch' || inputs.mode != 'cuda-iq-mmq'
     runs-on: ubuntu-24.04
     outputs:
       digest: ${{ steps.build_image.outputs.digest }}
@@ -75,3 +82,25 @@ jobs:
         env:
           IMAGE: ghcr.io/andrewting19/abliteration-station-runtime@${{ needs.publish.outputs.digest }}
         run: bash benchmarks/check_image_host_keys.sh "$IMAGE"
+  cuda_iq_mmq:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'cuda-iq-mmq'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - name: Free compiler disk
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+      - name: Build baseline and experimental CUDA libraries
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE:/work" -w /work \
+            nvidia/cuda@sha256:f9492f2eea77fbc3d0c14fa8738f35946b42da72917bf5959d284ca39b4f209a \
+            bash -lc 'apt-get update && apt-get install -y --no-install-recommends git cmake ninja-build build-essential libssl-dev ca-certificates && bash benchmarks/build_iq_mmq_candidate.sh'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iq-mmq-candidate
+          path: dist/iq-mmq-candidate
+          retention-days: 3
+          if-no-files-found: error
