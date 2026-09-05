@@ -15,8 +15,15 @@ git -C "$source_dir/source" apply "$project/patches/llama-slot-checkpoints.patch
 git -C "$source_dir/source" add tools/server/server-context.cpp
 [[ "$(git -C "$source_dir/source" write-tree)" == "$QWEN38_LLAMA_EXPECTED_TREE" ]]
 build="$source_dir/build"
+# Resolve the driver SONAME at link time on a runner without a GPU driver.
+# This directory is not packaged or placed on the runtime library path.
+driver_stubs="$source_dir/driver-link-stubs"
+install -d "$driver_stubs"
+test -f /usr/local/cuda/lib64/stubs/libcuda.so
+ln -s /usr/local/cuda/lib64/stubs/libcuda.so "$driver_stubs/libcuda.so.1"
 cmake -S "$source_dir/source" -B "$build" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=120a \
+  -DCMAKE_EXE_LINKER_FLAGS="-Wl,-rpath-link,$driver_stubs" \
   -DGGML_CUDA=ON -DGGML_CUDA_FA=ON -DGGML_CUDA_GRAPHS=ON \
   -DGGML_NATIVE=OFF -DBUILD_SHARED_LIBS=ON \
   -DLLAMA_BUILD_COMMON=ON -DLLAMA_BUILD_TESTS=ON \
