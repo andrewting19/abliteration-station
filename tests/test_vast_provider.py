@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import configparser
 import json
 import os
 import subprocess
@@ -18,6 +19,16 @@ ROOT = Path(__file__).parents[1]
 
 
 class VastProviderTest(unittest.TestCase):
+    def test_profile_service_uses_the_real_launcher_path(self) -> None:
+        production = configparser.ConfigParser(interpolation=None)
+        diagnostic = configparser.ConfigParser(interpolation=None)
+        production.read(ROOT / "scripts" / "vast" / "qwen38-cloud.conf")
+        diagnostic.read(ROOT / "benchmarks" / "qwen38-profile.conf")
+        launcher = production["program:qwen38-cloud"]["command"]
+        self.assertEqual(diagnostic["program:qwen38-profile"]["command"], launcher)
+        self.assertIn(launcher, (ROOT / "benchmarks" / "run_sampler_profile.sh").read_text())
+        self.assertEqual(diagnostic["program:qwen38-profile"]["autostart"], "false")
+
     def test_image_model_layers_use_fixed_timestamps(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "runtime-image.yml").read_text()
         self.assertIn("SOURCE_DATE_EPOCH=0", workflow)

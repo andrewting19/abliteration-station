@@ -27,6 +27,9 @@ Interpretation:
   nested measurements as if they were independent time intervals.
 - CPU-time fields use the calling thread's CPU clock. Compare them with
   elapsed time to distinguish CPU work from waits or descheduling.
+- Full-sampler fields intercept `common_sampler_sample` and subtract its
+  `llama_synchronize` calls. Grammar and chain measurements are subsets of
+  this total, not additional time. Other server and model work is not covered.
 - The measurements do not cover tokenization, model GPU execution, or all
   server bookkeeping. Low measured time rejects the hypothesis that this
   part explains most of the missing throughput.
@@ -37,3 +40,7 @@ Interpretation:
 `tests/test_sampler_profile.py` runs a Linux interposition test. It verifies
 call preservation, null-sampler forwarding, category counts, and timing output.
 The test does not establish correctness or performance on a real GPU workload.
+
+The C++ symbol signature is tied to the inspected engine revision. Verify the
+exported symbols and the forwarding test before using the probe with a different
+runtime. It fails closed if an original function cannot be resolved.

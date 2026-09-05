@@ -167,8 +167,9 @@ The image build also generated shared SSH host keys. Source changes remove
 build-time keys and generate fresh-container keys outside the portable model
 workspace. Tests verify different new keys and stable retained keys. Legacy
 retained containers preserve their existing trust until replacement. This
-image change is SOURCE ONLY: the pinned image has not been rebuilt or replaced.
-Do not claim that deployed images have received this remediation yet.
+image change was initially source-only. Candidate builds now pass fresh-key
+uniqueness and retained-key tests. The production default image is not yet
+changed; do not claim that legacy retained workers have new keys.
 
 ## Next performance investigation
 
@@ -178,3 +179,45 @@ vocabulary pieces on each active grammar application. Reusing decoded pieces
 or exact-state validity masks is a hypothesis, not a proven bottleneck or speed
 gain. Any cache must preserve UTF-8, grammar stacks, end-of-generation behavior,
 and cloned-sampler semantics exactly. Keep the 80 TPS and lifecycle gates open.
+
+## Candidate image and layer reuse verification
+
+Candidate `sha256:29c7977540116efe813ce79c9f82290a87922213130658f7a5bdc0d9d1461789`
+passed image build and CPU-only container tests in Actions run 33953229627.
+Two fresh containers had different host keys; restarting one preserved its
+key. A Vast test worker also presented a new key, not the legacy shared key.
+
+Layer-header inspection found different file and directory timestamps for
+unchanged model data in successive builds. All five large model/draft layers
+changed, requiring 14,151,118,052 additional bytes if the old layers were cached.
+Fixed `SOURCE_DATE_EPOCH` plus image-export timestamp rewriting was applied.
+Two independent normalized builds reused all five large layers; changed large
+layer bytes were zero. This does not remove model downloads on a fully uncached
+host. Candidate builds use separate tags and did not overwrite production tags.
+
+## Real sampler profile: CPU-sampler hypothesis rejected for this case
+
+The verified 196,442-token request produced 3,076 tokens at 53.22 decode TPS.
+Content and reasoning hashes matched the uninstrumented control. Decode took
+57,773.681 ms. The diagnostic probe reported:
+
+- Full sampler, excluding synchronization: 593.029 ms elapsed, 591.920 ms CPU.
+- Grammar: 2.872 ms elapsed, 2.761 ms CPU across 683 calls.
+- Sampler chain: 252.302 ms elapsed, 251.119 ms CPU across 3,077 calls.
+- Synchronization inside the sampler: 3.524 ms elapsed.
+
+Grammar and chain measurements are subsets of the full sampler. The full
+sampler is about one percent of decode time. Removing this cost cannot yield
+80 TPS. Do not implement grammar caching as the main speed fix based on the
+earlier hypothesis. Other server work is outside this measurement.
+
+An initial probe attempt failed before inference because its launcher path was
+wrong; that attempt is not evidence. The path was corrected and the actual
+diagnostic process was verified running. The second long-case profile was not
+started because insufficient time remained before cleanup. The test instance
+was deleted by its deadline cleanup; absence was verified.
+
+Next, measure target versus draft decode calls and recurrent-state replay or
+copy work. Inspect small speculative-batch CUDA dispatch before choosing a
+kernel change. Keep target weights, sampling, and verification semantics fixed
+for the first measurements. The 80 TPS and full live Pi wake gates remain open.
