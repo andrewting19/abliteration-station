@@ -18,6 +18,21 @@ ROOT = Path(__file__).parents[1]
 
 
 class VastProviderTest(unittest.TestCase):
+    def test_image_model_layers_use_fixed_timestamps(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "runtime-image.yml").read_text()
+        self.assertIn("SOURCE_DATE_EPOCH=0", workflow)
+        self.assertIn("rewrite-timestamp=true", workflow)
+        self.assertIn("candidate-${GITHUB_SHA}", workflow)
+
+    def test_sampler_profile_is_opt_in_and_applies_only_to_server(self) -> None:
+        launcher = (ROOT / "scripts" / "vast" / "run-qwen38-cloud.sh").read_text()
+        profile = (ROOT / "scripts" / "vast" / "runtime.env").read_text()
+        self.assertIn('SERVER_PREFIX=()', launcher)
+        self.assertIn('SERVER_PREFIX=(env "LD_PRELOAD=$QWEN38_SAMPLER_PROFILE_LIBRARY")', launcher)
+        self.assertIn('exec "${SERVER_PREFIX[@]}" "$SERVER"', launcher)
+        self.assertNotIn("export LD_PRELOAD", launcher)
+        self.assertNotIn("QWEN38_SAMPLER_PROFILE_LIBRARY", profile)
+
     def test_changed_instance_host_key_fails_without_wait_or_reset(self) -> None:
         source = (ROOT / "scripts" / "vast" / "qwen-vast").read_text()
         function = "wait_ssh() {" + source.split("wait_ssh() {", 1)[1].split("\ndeploy_instance()", 1)[0]

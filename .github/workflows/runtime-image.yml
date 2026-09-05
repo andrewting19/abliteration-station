@@ -41,11 +41,20 @@ jobs:
             echo IMAGE_TAGS
           } >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@v6
+        id: build_image
         with:
           context: .
           file: images/runtime/Dockerfile
           platforms: linux/amd64
-          push: true
+          # Keep unchanged model layers stable across runtime-only updates.
+          build-args: SOURCE_DATE_EPOCH=0
+          outputs: type=image,push=true,rewrite-timestamp=true
           provenance: false
           sbom: false
           tags: ${{ steps.image_tags.outputs.tags }}
+      - name: Record immutable image digest
+        env:
+          IMAGE_DIGEST: ${{ steps.build_image.outputs.digest }}
+        run: |
+          [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          printf 'IMAGE_DIGEST=%s\n' "$IMAGE_DIGEST"

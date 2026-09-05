@@ -113,7 +113,12 @@ fi
 
 mkdir -p "$ROOT/slot-cache"
 
-exec "$SERVER" \
+SERVER_PREFIX=()
+if [[ -n "${QWEN38_SAMPLER_PROFILE_LIBRARY:-}" ]]; then
+  [[ -s "$QWEN38_SAMPLER_PROFILE_LIBRARY" ]] || { echo "Sampler profile library is missing." >&2; exit 1; }
+  SERVER_PREFIX=(env "LD_PRELOAD=$QWEN38_SAMPLER_PROFILE_LIBRARY")
+fi
+exec "${SERVER_PREFIX[@]}" "$SERVER" \
   --model "$MODEL" \
   "${SPEC_MODEL_ARGS[@]}" \
   "${SPEC_ARGS[@]}" \
