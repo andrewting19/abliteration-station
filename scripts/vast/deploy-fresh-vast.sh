@@ -39,9 +39,13 @@ close_control_connection() {
 }
 trap close_control_connection EXIT
 
-SSH=(ssh -o ControlMaster=auto -o ControlPersist=60 -o ControlPath="$CONTROL_PATH" -o StrictHostKeyChecking=accept-new \
+HOST_KEY_ARGS=()
+if [[ "$INSTANCE_ID" =~ ^[0-9]+$ ]]; then
+  HOST_KEY_ARGS=(-o "HostKeyAlias=vast-instance-$INSTANCE_ID")
+fi
+SSH=(ssh "${HOST_KEY_ARGS[@]}" -o ControlMaster=auto -o ControlPersist=60 -o ControlPath="$CONTROL_PATH" -o StrictHostKeyChecking=accept-new \
   -i "$SSH_KEY" -p "$SSH_PORT" "root@$SSH_HOST")
-SCP=(scp -o ControlMaster=auto -o ControlPersist=60 -o ControlPath="$CONTROL_PATH" -o StrictHostKeyChecking=accept-new \
+SCP=(scp "${HOST_KEY_ARGS[@]}" -o ControlMaster=auto -o ControlPersist=60 -o ControlPath="$CONTROL_PATH" -o StrictHostKeyChecking=accept-new \
   -i "$SSH_KEY" -P "$SSH_PORT")
 
 "${SSH[@]}" "install -d -m 0755 '$REMOTE_STAGE' /workspace/qwen38"

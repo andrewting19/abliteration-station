@@ -34,7 +34,7 @@ ssh_port=$(jq -r '.ports["22/tcp"][0].HostPort // empty' <<<"$state")
 control="$work_directory/ssh.sock"
 ssh -S "$control" -O exit "root@$host" >/dev/null 2>&1 || true
 ssh -M -S "$control" -fN -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 \
-  -o StrictHostKeyChecking=accept-new -i "$ssh_key" -p "$ssh_port" \
+  -o StrictHostKeyChecking=accept-new -o "HostKeyAlias=vast-instance-$instance_id" -i "$ssh_key" -p "$ssh_port" \
   -L "127.0.0.1:$port:127.0.0.1:17070" "root@$host"
 python3 "$helpers/live_cache_restore_gate.py" --provider-local \
   --instance-id "$instance_id" --upstream "http://127.0.0.1:$port" \

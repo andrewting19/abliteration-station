@@ -59,7 +59,9 @@ RUN apt-get update \
     && bash /tmp/install-tailscale.sh \
     && rm -rf /var/lib/apt/lists/* /tmp/install-tailscale.sh \
     && install -d -m 0755 /run/sshd /opt/abliteration-station/cache /workspace/qwen38/models \
-    && ssh-keygen -A
+    && rm -f /etc/ssh/ssh_host_rsa_key /etc/ssh/ssh_host_rsa_key.pub \
+      /etc/ssh/ssh_host_ecdsa_key /etc/ssh/ssh_host_ecdsa_key.pub \
+      /etc/ssh/ssh_host_ed25519_key /etc/ssh/ssh_host_ed25519_key.pub
 
 RUN aria2c --allow-overwrite=true --auto-file-renaming=false --file-allocation=none \
       --max-connection-per-server=8 --min-split-size=8M --split=8 \

@@ -5,6 +5,8 @@ import contextlib
 import io
 import json
 import tempfile
+import subprocess
+import sys
 import threading
 import unittest
 from unittest.mock import patch
@@ -60,6 +62,25 @@ class StreamHandler(BaseHTTPRequestHandler):
 
 
 class BenchmarkTest(unittest.TestCase):
+    def test_draft_variant_does_not_change_target_or_sampling(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "models").mkdir()
+            (root / "models" / "Qwen3.8-27B-DFlash2-Q8_0.gguf").write_bytes(b"test")
+            runtime = root / "runtime.env"
+            original = "QWEN38_MODEL_FILE=target-q3.gguf\nQWEN38_DRAFT_QUANT=Q4_0\nQWEN38_TEMPERATURE=1.0\n"
+            runtime.write_text(original)
+            subprocess.run([sys.executable, str(ROOT / "benchmarks" / "set_draft_precision.py"), "Q8_0", "--runtime", str(runtime)], check=True, capture_output=True)
+            self.assertEqual(runtime.read_text(), original.replace("Q4_0", "Q8_0"))
+
+    def test_prefill_variant_changes_only_batch_sizes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            runtime = Path(temp) / "runtime.env"
+            original = "QWEN38_BATCH_SIZE=8192\nQWEN38_UBATCH_SIZE=2048\nQWEN38_DRAFT_QUANT=Q4_0\nQWEN38_TEMPERATURE=1.0\n"
+            runtime.write_text(original)
+            subprocess.run([sys.executable, str(ROOT / "benchmarks" / "set_prefill_batch.py"), "4096", "--runtime", str(runtime)], check=True, capture_output=True)
+            self.assertEqual(runtime.read_text(), original.replace("8192", "16384").replace("2048", "4096"))
+
     def test_cancelled_http_200_is_not_a_successful_turn(self) -> None:
         result = PROXY_SUMMARY.summarize([{
             "status": 200, "cancelled": True, "error": None, "total_seconds": 10,

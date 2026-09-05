@@ -24,6 +24,7 @@ fi
 
 node --check scripts/idle-proxy.mjs
 bash -n benchmarks/run_retained_probe.sh
+bash -n benchmarks/prepare_q8_draft.sh
 npm pack --dry-run --json >/tmp/abliteration-station-npm-pack.json
 python3 - <<'PY'
 import json

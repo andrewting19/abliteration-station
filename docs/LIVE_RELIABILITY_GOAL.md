@@ -134,3 +134,47 @@ The completed changes pass 72 tests and the release checks. Cancelled HTTP 200
 streams are excluded from successful-turn throughput. Summary output reports
 successful-output cost separately. The no-route idle path no longer repeatedly
 invokes a stop command that cannot succeed.
+
+## Paired draft and prefill tests
+
+Another isolated contract on the same physical test host used the same pinned
+target, runtime, context, temperature, thinking, and tool constraints.
+
+| Real request | Variant | Output tokens | Decode TPS | Prompt time |
+|---|---|---:|---:|---:|
+| 196,442 tokens | Q4 draft control | 3,076 | 53.19 | 151.93 s |
+| 196,442 tokens | Q8 draft | 3,076 | 52.60 | 152.90 s |
+| 201,715 tokens | Q8 draft, cached prefix | 1,658 | 67.89 | 6.64 s |
+| 201,715 tokens | Q4 draft, same cached-prefix count | 1,527 | 77.27 | 7.22 s |
+| 196,442 tokens | Q4, prefill microbatch 4096 | 2,803 | 53.00 | 147.41 s |
+
+The 196K Q4 and Q8 runs produced identical content and reasoning hashes. All
+runs ended with tool calls. Q8 is not promoted. The larger prefill microbatch
+saved about 4.5 seconds but used about 3.8 GB more VRAM and did not improve
+decode. It is not promoted. Production remains Q4 draft and 8192/2048 batches.
+The test contract was deleted; absence was verified. Test cleanup should use
+an absolute UTC deadline: the relative timer's displayed wall deadline drifted
+on the controller VM. The original wall-clock deadline was enforced instead.
+
+## SSH findings
+
+A fresh contract reused a previous container's address and port. Global
+address-based known-host entries caused SSH failure. The adapter now uses a
+stable `HostKeyAlias` based on the verified instance ID while keeping strict
+host-key checks. The corrected transport deployed successfully.
+
+The image build also generated shared SSH host keys. Source changes remove
+build-time keys and generate fresh-container keys outside the portable model
+workspace. Tests verify different new keys and stable retained keys. Legacy
+retained containers preserve their existing trust until replacement. This
+image change is SOURCE ONLY: the pinned image has not been rebuilt or replaced.
+Do not claim that deployed images have received this remediation yet.
+
+## Next performance investigation
+
+Measure sampler and grammar CPU cost on the real long-request corpus before
+another tuning sweep. The inspected `llama_grammar_apply_impl` decodes candidate
+vocabulary pieces on each active grammar application. Reusing decoded pieces
+or exact-state validity masks is a hypothesis, not a proven bottleneck or speed
+gain. Any cache must preserve UTF-8, grammar stacks, end-of-generation behavior,
+and cloned-sampler semantics exactly. Keep the 80 TPS and lifecycle gates open.

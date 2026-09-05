@@ -104,6 +104,7 @@ wait_ssh() {
   local retained_deadline=$((SECONDS + stopped_start_grace_seconds))
   local fresh_host_started=$SECONDS fresh_host_last_progress=$SECONDS
   local instance_json host port actual_status intended_status status_message
+  local ssh_result
   local running_since=0 stopped_since=0 last_progress=""
   while (( SECONDS < deadline )); do
     instance_json=$("$VASTAI" show instance "$instance_id" --raw 2>/dev/null || true)
@@ -163,11 +164,14 @@ wait_ssh() {
     host=$(jq -r '.public_ipaddr // empty' <<<"$instance_json" 2>/dev/null || true)
     port=$(jq -r '.ports["22/tcp"][0].HostPort // empty' <<<"$instance_json" 2>/dev/null || true)
     if [[ -n "$host" && "$port" =~ ^[0-9]+$ ]]; then
-      if ssh -o BatchMode=yes -o ConnectTimeout=5 -o ControlMaster=no \
-          -o ControlPath=none -o StrictHostKeyChecking=accept-new \
-          -i "$SSH_KEY" -p "$port" "root@$host" true 2>/dev/null; then
+      if ssh_result=$(ssh -o BatchMode=yes -o ConnectTimeout=5 -o ControlMaster=no \
+          -o ControlPath=none -o StrictHostKeyChecking=accept-new -o HostKeyAlias="vast-instance-$instance_id" \
+          -i "$SSH_KEY" -p "$port" "root@$host" true 2>&1); then
         printf '%s\t%s\n' "$host" "$port"
         return 0
+      fi
+      if [[ "$ssh_result" == *"REMOTE HOST IDENTIFICATION HAS CHANGED"* ]]; then
+        die "SSH host key changed for instance $instance_id; refusing automatic trust reset"
       fi
     fi
     sleep "$poll_seconds"
@@ -211,7 +215,7 @@ activate_copy() {
         die "Vast reported that the stopped-instance workspace copy failed"
       fi
     fi
-    if ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+    if ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new -o HostKeyAlias="vast-instance-$instance_id" \
       -i "$SSH_KEY" -p "$port" "root@$host" \
       "test -s '/tmp/qwen38/models/$QWEN38_TARGET_FILE' && \
        test -s '/tmp/qwen38/models/$QWEN38_DRAFT_Q4_FILE' && \
@@ -225,7 +229,7 @@ activate_copy() {
   done
   (( copy_ready == 1 )) || die "The verified workspace copy did not finish within 15 minutes"
 
-  ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+  ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new -o HostKeyAlias="vast-instance-$instance_id" \
     -i "$SSH_KEY" -p "$port" "root@$host" '
       set -euo pipefail
       [[ -d /tmp/qwen38 ]] || { echo "Copied workspace is missing" >&2; exit 1; }
@@ -241,7 +245,7 @@ verify_instance() {
   local endpoint host port
   endpoint=$(wait_ssh "$instance_id")
   IFS=$'\t' read -r host port <<<"$endpoint"
-  ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+  ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new -o HostKeyAlias="vast-instance-$instance_id" \
     -i "$SSH_KEY" -p "$port" "root@$host" '
       set -euo pipefail
       key=$(cat /workspace/qwen38/api_key)
@@ -279,9 +283,9 @@ performance_gate_instance() {
   IFS=$'\t' read -r host port <<<"$endpoint"
   remote_stage="/tmp/qwen38-performance-gate-$instance_id"
   local ssh_args=(-o ControlMaster=no -o ControlPath=none \
-    -o StrictHostKeyChecking=accept-new -i "$SSH_KEY" -p "$port" "root@$host")
+    -o StrictHostKeyChecking=accept-new -o HostKeyAlias="vast-instance-$instance_id" -i "$SSH_KEY" -p "$port" "root@$host")
   local scp_args=(-o ControlMaster=no -o ControlPath=none \
-    -o StrictHostKeyChecking=accept-new -i "$SSH_KEY" -P "$port")
+    -o StrictHostKeyChecking=accept-new -o HostKeyAlias="vast-instance-$instance_id" -i "$SSH_KEY" -P "$port")
 
   ssh "${ssh_args[@]}" "install -d -m 0700 '$remote_stage'"
   scp "${scp_args[@]}" \
@@ -330,7 +334,7 @@ resume_instance() {
   local endpoint host port
   endpoint=$(QWEN38_SSH_POLL_SECONDS=2 QWEN38_RETAINED_START=1 wait_ssh "$instance_id")
   IFS=$'\t' read -r host port <<<"$endpoint"
-  ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+  ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new -o HostKeyAlias="vast-instance-$instance_id" \
     -i "$SSH_KEY" -p "$port" "root@$host" '
       set -euo pipefail
       if ! supervisorctl pid >/dev/null 2>&1; then
@@ -368,7 +372,7 @@ capture_private_state() {
   secret_dir=${ABLITERATION_STATION_PRIVATE_STATE_DIR:-/var/lib/abliteration-station/vast-private}
   state_path="$secret_dir/tailscaled.state"
   install -d -m 0700 "$secret_dir"
-  scp -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+  scp -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new -o HostKeyAlias="vast-instance-$instance_id" \
     -i "$SSH_KEY" -P "$port" \
     "root@$host:/workspace/qwen38/tailscale/tailscaled.state" \
     "$state_path"
@@ -397,7 +401,7 @@ activate_private_route() {
   endpoint=$(wait_ssh "$instance_id")
   IFS=$'\t' read -r host port <<<"$endpoint"
   if [[ "${QWEN38_PRIVATE_ROUTE_PRELOADED:-0}" == 1 ]]; then
-    ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+    ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new -o HostKeyAlias="vast-instance-$instance_id" \
       -i "$SSH_KEY" -p "$port" "root@$host" '
         set -euo pipefail
         for _ in $(seq 1 60); do
@@ -416,13 +420,13 @@ activate_private_route() {
     printf '%s\n' "$instance_id" | install -m 0644 /dev/stdin "$INSTANCE_FILE"
     return
   fi
-  ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+  ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new -o HostKeyAlias="vast-instance-$instance_id" \
     -i "$SSH_KEY" -p "$port" "root@$host" \
     'supervisorctl stop tailscaled-qwen; install -d -m 0700 /workspace/qwen38/tailscale'
-  scp -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+  scp -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new -o HostKeyAlias="vast-instance-$instance_id" \
     -i "$SSH_KEY" -P "$port" "$state_path" \
     "root@$host:/workspace/qwen38/tailscale/tailscaled.state"
-  ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+  ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new -o HostKeyAlias="vast-instance-$instance_id" \
     -i "$SSH_KEY" -p "$port" "root@$host" '
       set -euo pipefail
       chmod 0600 /workspace/qwen38/tailscale/tailscaled.state
@@ -451,9 +455,9 @@ initialize_private_route() {
   local endpoint host port
   endpoint=$(wait_ssh "$instance_id")
   IFS=$'\t' read -r host port <<<"$endpoint"
-  scp -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+  scp -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new -o HostKeyAlias="vast-instance-$instance_id" \
     -i "$SSH_KEY" -P "$port" "$auth_key_file" "root@$host:/tmp/qwen-tailscale-auth-key"
-  ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+  ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new -o HostKeyAlias="vast-instance-$instance_id" \
     -i "$SSH_KEY" -p "$port" "root@$host" "
       set -euo pipefail
       chmod 0600 /tmp/qwen-tailscale-auth-key
@@ -706,7 +710,7 @@ cache_export() {
   IFS=$'\t' read -r host port <<<"$endpoint"
   remote="/workspace/qwen38/slot-cache/$filename"
   install -d -m 0700 "$destination"
-  metadata=$(ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+  metadata=$(ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new -o HostKeyAlias="vast-instance-$instance_id" \
     -i "$SSH_KEY" -p "$port" "root@$host" \
     "set -e; test -s '$remote'; test -s '$remote.ckpt'; printf '%s\\t%s\\t%s\\t%s\\n' \"\$(sha256sum '$remote' | cut -d' ' -f1)\" \"\$(sha256sum '$remote.ckpt' | cut -d' ' -f1)\" \"\$(stat -c %s '$remote')\" \"\$(stat -c %s '$remote.ckpt')\"")
   archive="$destination/$filename.tar.zst"
@@ -719,7 +723,7 @@ cache_export() {
     output=$archive
   fi
   rm -f -- "$temporary"
-  if ! ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+  if ! ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new -o HostKeyAlias="vast-instance-$instance_id" \
       -i "$SSH_KEY" -p "$port" "root@$host" \
       "tar -C /workspace/qwen38/slot-cache -cf - '$filename' '$filename.ckpt' | zstd -T0 -3 -c" >"$output"; then
     rm -f -- "$output"
@@ -757,7 +761,7 @@ cache_import() {
   endpoint=$(wait_ssh "$instance_id")
   IFS=$'\t' read -r host port <<<"$endpoint"
   remote=/workspace/qwen38/slot-cache
-  if ! zstd -dc -- "$archive" | ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+  if ! zstd -dc -- "$archive" | ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new -o HostKeyAlias="vast-instance-$instance_id" \
       -i "$SSH_KEY" -p "$port" "root@$host" \
       "set -euo pipefail; incoming='$remote/.incoming-$filename'; trap 'rm -rf -- \"\$incoming\"' EXIT; rm -rf -- \"\$incoming\"; install -d -m 0700 \"\$incoming\"; tar -C \"\$incoming\" -xf -; printf '%s  %s\\n' '$slot_sha' \"\$incoming/$filename\" | sha256sum -c - >/dev/null; printf '%s  %s\\n' '$checkpoint_sha' \"\$incoming/$filename.ckpt\" | sha256sum -c - >/dev/null; chmod 0600 \"\$incoming/$filename\" \"\$incoming/$filename.ckpt\"; mv -f \"\$incoming/$filename\" '$remote/$filename'; mv -f \"\$incoming/$filename.ckpt\" '$remote/$filename.ckpt'"; then
     die "The cache import or remote hash verification failed"
@@ -769,7 +773,7 @@ runtime_fingerprint() {
   [[ "$instance_id" =~ ^[0-9]+$ ]] || die "Instance ID must be numeric"
   endpoint=$(wait_ssh "$instance_id")
   IFS=$'\t' read -r host port <<<"$endpoint"
-  ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new \
+  ssh -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=accept-new -o HostKeyAlias="vast-instance-$instance_id" \
     -i "$SSH_KEY" -p "$port" "root@$host" 'bash -s' <<'REMOTE'
 set -euo pipefail
 root=/workspace/qwen38

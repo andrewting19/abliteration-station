@@ -18,6 +18,46 @@ ROOT = Path(__file__).parents[1]
 
 
 class VastProviderTest(unittest.TestCase):
+    def test_changed_instance_host_key_fails_without_wait_or_reset(self) -> None:
+        source = (ROOT / "scripts" / "vast" / "qwen-vast").read_text()
+        function = "wait_ssh() {" + source.split("wait_ssh() {", 1)[1].split("\ndeploy_instance()", 1)[0]
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            vast = root / "vast"
+            vast.write_text("#!/bin/sh\nprintf '%s\\n' '{\"actual_status\":\"running\",\"public_ipaddr\":\"127.0.0.1\",\"ports\":{\"22/tcp\":[{\"HostPort\":\"2222\"}]}}'\n")
+            ssh = root / "ssh"
+            ssh.write_text("#!/bin/sh\necho 'REMOTE HOST IDENTIFICATION HAS CHANGED' >&2\nexit 255\n")
+            vast.chmod(0o755)
+            ssh.chmod(0o755)
+            environment = dict(os.environ, PATH=str(root) + os.pathsep + os.environ["PATH"])
+            program = f"VASTAI='{vast}'\nSSH_KEY=unused\nprogress() {{ return 0; }}\ndie() {{ echo \"$*\" >&2; exit 1; }}\n" + function + "\nwait_ssh 123\n"
+            result = subprocess.run(["bash", "-c", program], env=environment, capture_output=True, text=True, timeout=3)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("refusing automatic trust reset", result.stderr)
+
+    def test_new_container_host_keys_are_unique_and_retained(self) -> None:
+        source = (ROOT / "scripts" / "vast" / "container-entrypoint.sh").read_text()
+        function = "prepare_host_key() {" + source.split("prepare_host_key() {", 1)[1].split("\n}", 1)[0] + "\n}"
+        with tempfile.TemporaryDirectory() as temp:
+            first, second = Path(temp) / "first", Path(temp) / "second"
+            for directory in (first, second):
+                subprocess.run(["bash", "-c", function + '\nprepare_host_key "$1"', "test", str(directory)], check=True, capture_output=True)
+            key = first / "ssh_host_ed25519_key"
+            original = key.read_bytes()
+            self.assertNotEqual((first / "ssh_host_ed25519_key.pub").read_bytes(), (second / "ssh_host_ed25519_key.pub").read_bytes())
+            subprocess.run(["bash", "-c", function + '\nprepare_host_key "$1"', "test", str(first)], check=True, capture_output=True)
+            self.assertEqual(key.read_bytes(), original)
+            self.assertEqual(key.stat().st_mode & 0o777, 0o600)
+        dockerfile = (ROOT / "images" / "runtime" / "Dockerfile").read_text()
+        self.assertNotIn("ssh-keygen -A", dockerfile)
+
+    def test_ssh_trust_is_scoped_to_instance_not_reused_port(self) -> None:
+        script = (ROOT / "scripts" / "vast" / "qwen-vast").read_text(encoding="utf-8")
+        deploy = (ROOT / "scripts" / "vast" / "deploy-fresh-vast.sh").read_text(encoding="utf-8")
+        self.assertEqual(script.count("StrictHostKeyChecking=accept-new"), script.count('HostKeyAlias="vast-instance-$instance_id"'))
+        self.assertIn("HostKeyAlias=vast-instance-$INSTANCE_ID", deploy)
+        self.assertNotIn("StrictHostKeyChecking=no", script + deploy)
+
     def test_cache_export_passes_selected_replace_mode(self) -> None:
         provider = VastProvider(
             {
