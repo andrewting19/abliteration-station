@@ -284,3 +284,27 @@ checks do not excuse the full-matrix failures. Initial diagnostic helper errors
 were corrected before collecting those results. Production remains unchanged.
 The full-matrix input, activation conversion, and dispatch paths need further
 investigation before either candidate can be accepted or benchmarked on Pi.
+
+## Bounded lookup extraction fix
+
+Input readback matched the original buffers. Compute Sanitizer found invalid
+global reads in IQ2_S table access at vecdotq.cuh:1140. Replacing the local
+byte-pointer index reads with unsigned shifts and masks fixed the independent
+vector-matrix test. Its CUDA NMSE became approximately 0.00006, below the
+unchanged 0.0005 threshold. Its memory check reported zero errors.
+
+With only the vector fix, the broader test passed 124/130 cases. The six
+remaining failures used the matrix kernel, which had the same lookup pattern.
+Applying equivalent extraction there produced 130/130 passing cases and zero
+Compute Sanitizer errors. Evidence is on Kevin under
+`benchmarks/private/iq-mmq-results/both-fixed-sanitizer.log` in service state.
+These tests used diagnostic shared-library overrides, not a released runtime.
+The exact compiler root cause is not yet established; do not claim all local
+byte-pointer reads are unsafe or that production was shown to have this fault.
+
+Commit 8b7eeb2 saves the patch and starts full paired build 33967291510. Both
+outputs include the lookup fix; only the candidate changes the IQ verification
+batch dispatch. This separates correctness work from the proposed speed change.
+The full rebuilt artifacts must repeat numerical checks before real Pi replay.
+Test instance 49959229 was deleted after logs were copied. Its absence was
+verified. Production remains unchanged, and all agentic speed gates remain open.
