@@ -434,3 +434,26 @@ was deleted after result-file checks, and absence was verified. Production was
 not changed. Further work must address the measured GPU costs without assuming
 that removing one conversion kernel makes the replacement attention path faster.
 The 80 TPS, fresh-start, and full live Pi cycle requirements remain incomplete.
+
+## Conversion-only paired replay, checked 2026-09-06 00:35 UTC
+
+Instance 50001402 completed the 201715-token captured request with the fixed
+baseline at 73.9658 decode TPS and the conversion-only candidate at 76.8695 TPS.
+Both produced 1004 tokens, finished with an edit tool call, and matched content
+and reasoning hashes. This is one pair, not a repeatable speed result. The old
+summary did not hash tool arguments, so full output equality is not proven.
+The replay helper now records a private-text-free hash of ordered tool names
+and exact arguments. Future paired comparisons must check that hash too.
+
+Baseline prefill took 135.854 seconds. Candidate reused 201711 tokens and had
+request TTFT of 0.730 seconds. This excludes provisioning, startup, and cache
+transfer; it does not prove the retained-wake or fresh-instance TTFT gate.
+The conversion kernel passed bitwise checks and numerical attention tests,
+but no inference change is promoted from this single measurement.
+
+The cleanup timer removed instance 50001402; its absence was verified through
+the provider API. All four original retained instances are stopped. The
+production proxy is active with no active request or pending wake. Budget
+drawdown is $2.0428 of the user's additional $5 allowance. The guard remains
+enabled. The next speed test needs repeated warm baseline/candidate runs with
+full output fingerprints on the same host. All full-goal gates remain open.
