@@ -527,3 +527,59 @@ abliteration-station, URL http://127.0.0.1:17076/v1, qwen38-cloud, context 26214
 medium thinking, no active inference, and 362 historical messages. No prompt
 has been sent. All three test units/guards checked active. Drawdown at 03:03
 UTC was $3.5998. Continue the existing handles, not a duplicate deployment.
+
+### Provider startup failure, 2026-09-06 03:10 UTC
+
+Readiness session 45233 exited with status 1 and `Readiness deadline reached`.
+Provider state remained loading with no SSH port throughout the bounded check.
+The daemon-log request returned no useful content. Saved the final filtered
+provider state in private/pi-lifecycle-50023706/provider-failure.json, then
+destroyed only instance 50023706. A fresh instance listing confirms absence.
+Stopped pi-lifecycle-50023706-proxy and closed Pi RPC session 61951 with EOF.
+No model or inference request ran. The isolated fixture and session copy remain
+on Kevin. Production was not modified. Drawdown at 03:10 UTC was $3.6263;
+the account guard remains active. This failed provider startup is not a speed
+measurement or a successful lifecycle cycle. Do not resume the terminal tool
+handles or try to start this destroyed instance.
+
+## Retained autostart discovery and live Pi test, 2026-09-06
+
+After one offer disappeared before create, instance 50024630 was acquired at
+$0.428333/hour. Its 45-minute cleanup timer remains active. The official
+bootstrap completed on the test instance. Production route was not changed.
+Private Pi RPC session 4822 uses private/pi-lifecycle-50024630; no inference
+candidate was installed. This is the released target, draft, and CUDA runtime.
+
+The initial 185637-token Pi fixture turn completed a real read tool and final
+answer. It took 156.10 seconds to first token, including 14.50 seconds of local
+route preparation; prefill was 1332.42 TPS. These short outputs are not sustained
+decode acceptance. Cache save preserved 185805 tokens. A full confirmed
+stop/wake/request cycle succeeded at 55.023-second TTFT, reusing 185749 tokens.
+
+The container PID 1 was `bash /.launch`. It calls /root/onstart.sh before SSH,
+but that hook was empty. Installing an ENTRYPOINT helper alone did not activate
+it in this base-image/SSH path. Added retained-onstart.sh and bootstrap wiring
+for the empty default hook and the exact prior package hook. Custom hooks and
+symlinks are preserved. The existing package SSH permission repair is retained
+in vast-onstart.sh, which calls the new helper when installed.
+
+On the test worker the next confirmed stop/wake/Pi turn took 37.822 seconds to
+first token and reused 185914 cache tokens. Supervisor showed model uptime of
+24 seconds when the SSH check arrived. This supports earlier startup, but only
+one post-change cycle has met the 45-second target.
+
+The following wake failed because Vast reported resources unavailable. It
+returned 503 after 48.68 seconds. A further real Pi cancellation test aborted
+while an actual provider wake was pending: active_requests became zero, metric
+status was 499/cancelled with no inference tokens, and Pi reported aborted.
+The shared wake continued, then failed its provider deadline. At 03:41 UTC the
+instance was exited/intended stopped, with no request, wake, or route left.
+The three consecutive successful cycles requirement is NOT met. Idle-stop
+timing and sustained 80 TPS remain open.
+
+Also corrected source UI wording: a missing route does not prove the GPU is
+stopped, and an HTTP response does not mean the first model token has arrived.
+Unit checks cover ready-route wording. The release check passed 106 tests with
+two environment-specific skips before the final connection wording adjustment.
+The source changes are not yet installed into production or publicly released.
+Private metrics and the 186104-token saved-cache metadata remain on Kevin.

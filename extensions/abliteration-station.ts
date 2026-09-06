@@ -103,7 +103,10 @@ export default function (pi: ExtensionAPI) {
     try {
       const health = await readHealth();
       const lifecycle = health.lifecycle;
-      if (lifecycle?.message) {
+      if (health.route && !health.wake_in_flight) {
+        message = `Qwen connected; waiting for response — ${elapsed}s`;
+        detail = "The GPU route is ready. Waiting for the model response; remaining time is unknown.";
+      } else if (lifecycle?.message) {
         const phaseElapsed = lifecycle.phase_started_unix_ms
           ? Math.max(0, Math.floor((Date.now() - lifecycle.phase_started_unix_ms) / 1000))
           : elapsed;
@@ -134,7 +137,7 @@ export default function (pi: ExtensionAPI) {
     readyTimer = undefined;
     wakeStartedAt = Date.now();
     void renderWake(ctx);
-    ctx.ui.notify("The GPU is stopped. Abliteration Station is starting it now.", "info");
+    ctx.ui.notify("Abliteration Station is preparing the model connection. Your request will continue automatically.", "info");
     timer = setInterval(() => void renderWake(ctx), 1000);
   };
 
@@ -146,8 +149,8 @@ export default function (pi: ExtensionAPI) {
     ctx.ui.setWidget(WIDGET_KEY, undefined);
     ctx.ui.setWorkingMessage();
     if (outcome === "ready") {
-      ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("success", `Qwen ready after ${elapsed}s`));
-      ctx.ui.notify(`Qwen is ready after ${elapsed}s. Pi is sending your prompt.`, "info");
+      ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("success", `Qwen connection ready after ${elapsed}s`));
+      ctx.ui.notify(`Connected to Qwen after ${elapsed}s. Waiting for response tokens.`, "info");
       readyTimer = setTimeout(() => {
         ctx.ui.setStatus(STATUS_KEY, undefined);
         readyTimer = undefined;
@@ -192,7 +195,7 @@ export default function (pi: ExtensionAPI) {
           ? "starting Vast"
           : health.route
             ? `ready on ${health.route.provider ?? "cloud"}`
-            : "stopped; the next prompt will start Vast";
+            : "not connected; the next prompt will prepare the GPU route";
         ctx.ui.notify(
           `Qwen is ${state}. Active requests: ${health.active_requests ?? 0}. Idle: ${health.idle_seconds ?? 0}/${health.idle_limit_seconds ?? "?"}s.`,
           health.last_wake_error ? "warning" : "info",
