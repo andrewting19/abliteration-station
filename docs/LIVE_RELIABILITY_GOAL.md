@@ -583,3 +583,34 @@ Unit checks cover ready-route wording. The release check passed 106 tests with
 two environment-specific skips before the final connection wording adjustment.
 The source changes are not yet installed into production or publicly released.
 Private metrics and the 186104-token saved-cache metadata remain on Kevin.
+
+### Scope correction and canonical rental retry
+
+The preceding test used a manual `--ssh` base-image rental. The normal
+qwen-vast rent command instead uses the pinned model image with `--args ""`,
+which activates its own ENTRYPOINT. Therefore the 37.822-second measurement
+and the empty onstart-hook fix apply to the legacy SSH/base-image path, not
+proof of an improvement to the default production rental path. Do not promote
+that measurement as default-path acceptance. No such production update was made.
+
+Instance 50024630 stayed unavailable. It was destroyed and absence verified;
+the private proxy and Pi RPC session 4822 were closed. Its temporary worker
+cache was removed with the rental. The original Pi history and all original
+production instances/caches were not changed. Test metrics and source session
+copies remain private on Kevin.
+
+Added a validated QWEN38_INSTANCE_LABEL option (default unchanged) so the normal
+rental command can create budget-guarded test instances. Used that source command
+to rent instance 50027040, offer 41974058 on machine 141223, at $0.521667/hour.
+Provider readback verifies the production image digest ending 3f1e16490a and
+image_runtype=args. The 45-minute cleanup timer is active. Official installed
+qwen-vast deploy is running with private-route activation disabled. Check its
+live tool handle before retrying; no Pi request has started on this instance.
+Measured drawdown before rental was $3.9433 of the user's $5 allowance. The
+account guard remains authoritative and may end this trial before cleanup.
+
+Canonical deploy tool session: 87939 (confirmed live while provider image layers
+download). The test-label validation and existing provider tests pass, 29/29.
+The original production bootstrap/deploy/onstart files matched their prior
+source hashes at readback. They were not overwritten. Do not claim the new
+legacy-hook or UI source changes are installed in production.

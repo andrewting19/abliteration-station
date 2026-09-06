@@ -8,6 +8,11 @@ SSH_KEY=${QWEN38_SSH_KEY:-$HOME/.ssh/abliteration-station-vast}
 INSTANCE_FILE=${ABLITERATION_STATION_INSTANCE_FILE:-/var/lib/abliteration-station/vast-instance-id}
 PROGRESS_COMMAND=${ABLITERATION_STATION_PROGRESS_COMMAND:-/usr/local/bin/abliteration-station-progress}
 MIN_DURATION_DAYS=${QWEN38_MIN_DURATION_DAYS:-1}
+INSTANCE_LABEL=${QWEN38_INSTANCE_LABEL:-qwen38-q3}
+[[ "$INSTANCE_LABEL" =~ ^[A-Za-z0-9_.-]{1,80}$ ]] || {
+  echo "QWEN38_INSTANCE_LABEL must contain 1-80 letters, digits, dots, underscores, or hyphens" >&2
+  exit 2
+}
 [[ "$MIN_DURATION_DAYS" =~ ^[1-9][0-9]*$ ]] || {
   echo "QWEN38_MIN_DURATION_DAYS must be a positive integer" >&2
   exit 2
@@ -529,7 +534,7 @@ rent_offer() {
   local args=(create instance "$offer_id"
     --image "$image"
     --disk 150 --env "$container_env" --cancel-unavail
-    --label qwen38-q3)
+    --label "$INSTANCE_LABEL")
   if [[ "$rental_type" == "bid" ]]; then
     args+=(--bid_price "$cap")
   fi
@@ -632,7 +637,7 @@ rent_performance() {
     result=$("$VASTAI" create instance "$offer_id" \
       --image "$RUNTIME_IMAGE" \
       --disk 150 --env "$container_env" --cancel-unavail \
-      --label qwen38-q3 --raw --args "" 2>&1)
+      --label "$INSTANCE_LABEL" --raw --args "" 2>&1)
     rc=$?
     set -e
     if [[ $rc -eq 0 ]] && jq -e '.success == true and .new_contract' >/dev/null 2>&1 <<<"$result"; then
@@ -676,7 +681,7 @@ rent_balanced() {
     result=$("$VASTAI" create instance "$offer_id" \
       --image "$RUNTIME_IMAGE" \
       --disk 150 --env "$container_env" --cancel-unavail \
-      --label qwen38-q3 --raw --args "" 2>&1)
+      --label "$INSTANCE_LABEL" --raw --args "" 2>&1)
     rc=$?
     set -e
     if [[ $rc -eq 0 ]] && jq -e '.success == true and .new_contract' >/dev/null 2>&1 <<<"$result"; then

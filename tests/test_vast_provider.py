@@ -19,6 +19,18 @@ ROOT = Path(__file__).parents[1]
 
 
 class VastProviderTest(unittest.TestCase):
+    def test_test_labels_reject_invalid_values_before_provider_access(self) -> None:
+        script = ROOT / "scripts" / "vast" / "qwen-vast"
+        self.assertIn('INSTANCE_LABEL=${QWEN38_INSTANCE_LABEL:-qwen38-q3}', script.read_text())
+        for label in ("", "bad label", "../bad", "a" * 81):
+            if not label:  # Empty selects the unchanged default by shell semantics.
+                continue
+            env = dict(os.environ, QWEN38_INSTANCE_LABEL=label, VASTAI="/does/not/exist")
+            result = subprocess.run(["bash", str(script), "offers"], env=env,
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn("QWEN38_INSTANCE_LABEL", result.stderr)
+
     def test_profile_service_uses_the_real_launcher_path(self) -> None:
         production = configparser.ConfigParser(interpolation=None)
         diagnostic = configparser.ConfigParser(interpolation=None)
