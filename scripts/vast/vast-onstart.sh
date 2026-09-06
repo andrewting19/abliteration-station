@@ -19,3 +19,6 @@ nohup bash -c '
 ' >/tmp/qwen38-ssh-permission-repair.log 2>&1 </dev/null &
 
 install -d -m 0755 /workspace/qwen38
+if [[ -x /usr/local/bin/abliteration-station-start-retained ]]; then
+  /usr/local/bin/abliteration-station-start-retained
+fi

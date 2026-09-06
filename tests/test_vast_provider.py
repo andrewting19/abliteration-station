@@ -540,6 +540,23 @@ class VastProviderTest(unittest.TestCase):
         self.assertIn("QWEN38_OFFER_ACQUIRE_ATTEMPTS", ensure)
         self.assertIn('sort -nu "$failed_offers_file" | paste -sd, -', ensure)
 
+    def test_ssh_launcher_gets_a_retained_autostart_hook(self) -> None:
+        assets = ROOT / "scripts" / "vast"
+        bootstrap = (assets / "bootstrap-fresh-vast.sh").read_text()
+        deploy = (assets / "deploy-fresh-vast.sh").read_text()
+        hook = (assets / "retained-onstart.sh").read_text()
+        original_hook = (assets / "vast-onstart.sh").read_text()
+        self.assertIn('"$SCRIPT_DIR/vast-onstart.sh"', deploy)
+        self.assertIn('grep -qvE', bootstrap)
+        self.assertIn('! -L /root/onstart.sh', bootstrap)
+        self.assertIn('Custom Vast onstart hook preserved', bootstrap)
+        self.assertIn('RUNNING|STARTING', hook)
+        self.assertIn('supervisord -c /etc/supervisor/supervisord.conf', hook)
+        self.assertNotIn('sshd', hook)
+        self.assertNotIn('restart', hook)
+        self.assertIn('SSH permission repair', original_hook)
+        self.assertIn('abliteration-station-start-retained', original_hook)
+
     def test_retained_start_grace_fails_over_after_provider_scheduling_window(self) -> None:
         script = (ROOT / "scripts" / "vast" / "qwen-vast").read_text(
             encoding="utf-8"

@@ -321,6 +321,8 @@ for required in \
   "$SCRIPT_DIR/slot-cache-control.sh" \
   "$SCRIPT_DIR/run-tailscaled.sh" \
   "$SCRIPT_DIR/container-entrypoint.sh" \
+  "$SCRIPT_DIR/vast-onstart.sh" \
+  "$SCRIPT_DIR/retained-onstart.sh" \
   "$SCRIPT_DIR/qwen38-cloud.conf" \
   "$SCRIPT_DIR/tailscaled-qwen.conf" \
   "$SCRIPT_DIR/runtime.env"; do
@@ -336,6 +338,24 @@ install -m 0755 "$SCRIPT_DIR/container-entrypoint.sh" \
 install -m 0644 "$SCRIPT_DIR/qwen38-cloud.conf" /etc/supervisor/conf.d/qwen38-cloud.conf
 install -m 0644 "$SCRIPT_DIR/tailscaled-qwen.conf" /etc/supervisor/conf.d/tailscaled-qwen.conf
 install -m 0600 "$SCRIPT_DIR/runtime.env" "$QWEN38_ROOT/runtime.env"
+install -m 0755 "$SCRIPT_DIR/retained-onstart.sh" /usr/local/bin/abliteration-station-start-retained
+# Vast's SSH launcher bypasses the image ENTRYPOINT. Only replace its empty
+# default hook; leave existing user commands unchanged.
+if [[ -f /.launch ]] && grep -q '/root/onstart.sh' /.launch; then
+  if [[ -f /root/onstart.sh && ! -L /root/onstart.sh ]] &&
+     ! grep -qvE '^[[:space:]]*(#.*)?$' /root/onstart.sh; then
+    cp -n /root/onstart.sh /root/onstart.sh.abliteration-original
+    install -m 0755 "$SCRIPT_DIR/retained-onstart.sh" /root/onstart.sh
+  elif [[ -f /root/onstart.sh && ! -L /root/onstart.sh ]] &&
+       [[ $(sha256sum /root/onstart.sh | cut -d ' ' -f1) == 0f7e1532d3c265328b4354f509cd13fc9bd2c79a9e193bfe88e564ac7f7d3d1d ]]; then
+    # Exact prior package hook: retain its SSH repair and add model autostart.
+    cp -n /root/onstart.sh /root/onstart.sh.abliteration-original
+    install -m 0755 "$SCRIPT_DIR/vast-onstart.sh" /root/onstart.sh
+  elif ! cmp -s "$SCRIPT_DIR/vast-onstart.sh" /root/onstart.sh &&
+       ! cmp -s "$SCRIPT_DIR/retained-onstart.sh" /root/onstart.sh; then
+    echo 'Custom Vast onstart hook preserved; retained model autostart was not installed.' >&2
+  fi
+fi
 sed -i "s/^QWEN38_BUILD_DIR=.*/QWEN38_BUILD_DIR=$BUILD_NAME/" "$QWEN38_ROOT/runtime.env"
 sed -i "s/^QWEN38_MODEL_FILE=.*/QWEN38_MODEL_FILE=$SELECTED_MODEL_FILE/" "$QWEN38_ROOT/runtime.env"
 
