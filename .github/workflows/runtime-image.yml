@@ -7,7 +7,7 @@ on:
         description: Artifact to build
         type: choice
         default: image
-        options: [image, cuda-iq-mmq, q4-mma-tile]
+        options: [image, runtime-only, cuda-iq-mmq, q4-mma-tile]
   push:
     branches: [main]
     paths:
@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   publish:
-    if: github.event_name != 'workflow_dispatch' || inputs.mode == 'image'
+    if: github.event_name != 'workflow_dispatch' || inputs.mode == 'image' || inputs.mode == 'runtime-only'
     runs-on: ubuntu-24.04
     outputs:
       digest: ${{ steps.build_image.outputs.digest }}
@@ -38,10 +38,14 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Select image tags
         id: image_tags
+        env:
+          BUILD_MODE: ${{ inputs.mode }}
         run: |
           {
             echo 'tags<<IMAGE_TAGS'
-            if [[ "$GITHUB_REF" == refs/heads/main ]]; then
+            if [[ "$BUILD_MODE" == runtime-only ]]; then
+              echo "ghcr.io/andrewting19/abliteration-station-runtime:runtime-only-${GITHUB_SHA}"
+            elif [[ "$GITHUB_REF" == refs/heads/main ]]; then
               echo ghcr.io/andrewting19/abliteration-station-runtime:cuda13.2-v6
               echo ghcr.io/andrewting19/abliteration-station-runtime:latest
             else
@@ -54,6 +58,7 @@ jobs:
         with:
           context: .
           file: images/runtime/Dockerfile
+          target: ${{ inputs.mode == 'runtime-only' && 'runtime-only' || 'model-bundled' }}
           platforms: linux/amd64
           # Keep unchanged model layers stable across runtime-only updates.
           build-args: SOURCE_DATE_EPOCH=0

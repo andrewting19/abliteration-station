@@ -19,6 +19,17 @@ ROOT = Path(__file__).parents[1]
 
 
 class VastProviderTest(unittest.TestCase):
+    def test_runtime_only_target_does_not_copy_weights_or_change_default(self) -> None:
+        dockerfile = (ROOT / "images/runtime/Dockerfile").read_text()
+        runtime = dockerfile.split(" AS runtime-only", 1)[1].split("FROM runtime-only AS model-bundled", 1)[0]
+        self.assertNotIn("COPY --from=model-sharder", runtime)
+        self.assertIn('ENTRYPOINT ["/usr/local/bin/abliteration-station-container-entrypoint"]', runtime)
+        self.assertIn('"$RUNTIME_SHA256  /opt/abliteration-station/cache/runtime.tar.zst"', runtime)
+        self.assertEqual(dockerfile.count("COPY --from=model-sharder"), 5)
+        workflow = (ROOT / ".github/workflows/runtime-image.yml").read_text()
+        self.assertIn("'runtime-only' || 'model-bundled'", workflow)
+        self.assertIn('runtime-only-${GITHUB_SHA}', workflow)
+
     def test_test_labels_reject_invalid_values_before_provider_access(self) -> None:
         script = ROOT / "scripts" / "vast" / "qwen-vast"
         self.assertIn('INSTANCE_LABEL=${QWEN38_INSTANCE_LABEL:-qwen38-q3}', script.read_text())

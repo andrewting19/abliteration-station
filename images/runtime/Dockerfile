@@ -38,7 +38,7 @@ RUN install -d -m 0755 /model \
 
 FROM nvidia/cuda:13.2.0-runtime-ubuntu24.04@sha256:3b8afffc99c6ca801e6bf31a426400432cc8ba9dea77bd27ccf8cd67f06424eb AS cuda-runtime
 
-FROM nvidia/cuda:13.2.0-base-ubuntu24.04@sha256:b66239c62d5aa5481cb8151c7ff410e0d8d3d4a75cb4c90e66e89639ded490f4
+FROM nvidia/cuda:13.2.0-base-ubuntu24.04@sha256:b66239c62d5aa5481cb8151c7ff410e0d8d3d4a75cb4c90e66e89639ded490f4 AS runtime-only
 
 ARG RUNTIME_URL=https://github.com/andrewting19/abliteration-station/releases/download/bootstrap-artifacts-v1/llama-build-cuda13-sm120a-dflash-fused-kvpatch.tar.zst
 ARG RUNTIME_SHA256=a306552e059c812dc9a0991b19be400e98b6f7c6174a8ad5921a91a837247955
@@ -70,15 +70,18 @@ RUN aria2c --allow-overwrite=true --auto-file-renaming=false --file-allocation=n
     && printf '%s  %s\n' "$RUNTIME_SHA256" runtime.tar.zst \
       > /opt/abliteration-station/cache/runtime.tar.zst.sha256
 
+COPY scripts/vast/container-entrypoint.sh /usr/local/bin/abliteration-station-container-entrypoint
+RUN chmod 0755 /usr/local/bin/abliteration-station-container-entrypoint
+
+EXPOSE 22
+ENTRYPOINT ["/usr/local/bin/abliteration-station-container-entrypoint"]
+
+# Keep the model-bundled image as the default final target. The runtime-only
+# target uses the identical binaries but fetches verified weights at bootstrap.
+FROM runtime-only AS model-bundled
 RUN install -d -m 0755 /opt/abliteration-station/cache/models
 COPY --from=model-sharder /model/Qwen3.8-27B-Unleashed-UD-Q3_K_XL-00001-of-00004.gguf /opt/abliteration-station/cache/models/
 COPY --from=model-sharder /model/Qwen3.8-27B-Unleashed-UD-Q3_K_XL-00002-of-00004.gguf /opt/abliteration-station/cache/models/
 COPY --from=model-sharder /model/Qwen3.8-27B-Unleashed-UD-Q3_K_XL-00003-of-00004.gguf /opt/abliteration-station/cache/models/
 COPY --from=model-sharder /model/Qwen3.8-27B-Unleashed-UD-Q3_K_XL-00004-of-00004.gguf /opt/abliteration-station/cache/models/
 COPY --from=model-sharder /model/Qwen3.8-27B-DFlash2-Q4_0.gguf /opt/abliteration-station/cache/
-
-COPY scripts/vast/container-entrypoint.sh /usr/local/bin/abliteration-station-container-entrypoint
-RUN chmod 0755 /usr/local/bin/abliteration-station-container-entrypoint
-
-EXPOSE 22
-ENTRYPOINT ["/usr/local/bin/abliteration-station-container-entrypoint"]
