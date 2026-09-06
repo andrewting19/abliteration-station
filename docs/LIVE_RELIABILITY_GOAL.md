@@ -457,3 +457,73 @@ production proxy is active with no active request or pending wake. Budget
 drawdown is $2.0428 of the user's additional $5 allowance. The guard remains
 enabled. The next speed test needs repeated warm baseline/candidate runs with
 full output fingerprints on the same host. All full-goal gates remain open.
+
+### Repeat test started, 2026-09-06 00:39 UTC
+
+Test instance 50014017 (machine 145373) was rented at $0.508333/hour after
+exact-offer revalidation. The provider reports the base image is still loading.
+The one-hour `abliteration-test-50014017-expire.timer` is active on Kevin.
+The account spending guard is active; drawdown before rental was $2.0501.
+Only this test instance is intended to run. Production routing is unchanged.
+The bounded readiness/bootstrap command is in tool session 17437. Inspect this
+handle and provider state before retrying; do not create a duplicate instance.
+Use the updated replay helper in private/q4-mma-results for complete tool
+fingerprints. No replay has started on this instance yet.
+
+The next check confirmed the same live readiness process, with provider image
+layers still progressing. Contract start was Unix 1788655028.2870266. Loading
+already exceeded 180 seconds before SSH readiness, so this attempt cannot meet
+the fresh-instance TTFT target. Keep this delay in the result. The complete
+local release check passed: 104 tests, two environment-specific skips, and
+RELEASE_CHECK_OK. These tests do not replace real Pi acceptance cycles.
+
+### Repeat results and cleanup, 2026-09-06 02:58 UTC
+
+The 201715-token baseline cold request completed at 62.7979 decode TPS and
+1289.38 prefill TPS (156.443 seconds prefill). Each replay produced 1004 output
+tokens. Three restored-cache baseline runs measured 67.9954, 67.8686, and
+67.8690 TPS. Three conversion-candidate runs measured 64.5399, 69.0867, and
+69.1929 TPS. All seven runs matched content, reasoning, and ordered tool name
+and argument hashes. Each warm run restored 201711 prompt tokens.
+
+The candidate's initial run after restart was slower. Its two later runs show
+only a small gain, not the 80 TPS outcome. No inference candidate is promoted.
+The earlier cold-baseline versus warm-candidate pair is not a sufficient
+measurement of a speed gain. Warm cache restore took approximately 1.7-2.0
+seconds here; this is not full stop/wake TTFT.
+
+The provider now confirms instance 50014017 is absent after scheduled cleanup.
+The intended return to the released library was not executed before cleanup;
+there is no test server left to restore. Private result files are retained on
+Kevin under q4-mma-results. Current spending drawdown is $3.5786 of the $5
+allowance. Production proxy has no active request or pending wake. Full Pi
+stop/wake cycles and all performance requirements remain unproven.
+
+### Final budgeted lifecycle test setup, 2026-09-06 03:02 UTC
+
+Rented instance 50023706 on machine 144282 at $0.440333/hour after exact-offer
+revalidation. The 45-minute abliteration-test-50023706-expire timer is active;
+the account guard remains the earlier stop condition. Do not create another
+instance while this one exists. Provider state is loading, with no SSH port.
+Bounded readiness and official bootstrap process: tool session 45233.
+
+Isolated state is on Kevin at benchmarks/private/pi-lifecycle-50023706. The
+session fork uses the same historical 201715-token request boundary. Original
+Pi history is unchanged. The private proxy is on port 17076, in transient unit
+pi-lifecycle-50023706-proxy with a 40-minute runtime cap. Health is good, with
+zero requests and no route. No inference request has been sent yet.
+
+The test-only ensure adapter now starts its SSH tunnel in a separate systemd
+unit instead of the proxy process group. This addresses the prior test setup
+fault where proxy restart killed the cache-save route. Shell syntax passes;
+live tunnel restart behavior still needs verification. This change does not
+alter production Tailscale or production routing. The fixture tool guard is
+benchmarks/private/pi_read_guard.ts and permits only test-project reads.
+
+At 03:05 UTC the same provider instance remains loading with no SSH port.
+The readiness command is confirmed live in session 45233. The private Pi RPC
+process is live in session 61951. Its get_state response confirms provider
+abliteration-station, URL http://127.0.0.1:17076/v1, qwen38-cloud, context 262144,
+medium thinking, no active inference, and 362 historical messages. No prompt
+has been sent. All three test units/guards checked active. Drawdown at 03:03
+UTC was $3.5998. Continue the existing handles, not a duplicate deployment.
