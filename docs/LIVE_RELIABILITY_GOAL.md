@@ -614,3 +614,56 @@ download). The test-label validation and existing provider tests pass, 29/29.
 The original production bootstrap/deploy/onstart files matched their prior
 source hashes at readback. They were not overwritten. Do not claim the new
 legacy-hook or UI source changes are installed in production.
+
+### Canonical wait and UI installation, 2026-09-06
+
+Deploy session 87939 exited on the 180-second unchanged-provider-message guard.
+A subsequent provider read showed a different completed image layer, while the
+same instance remained loading. Retried only the readiness/deploy operation on
+that instance; current deploy handle is 38737. No second rental was created.
+Private Pi state for 50027040 is prepared; RPC session 92732 is open but has not
+sent an inference request. Its /abliteration-status output correctly reports
+not connected, without claiming that the GPU is stopped.
+
+Installed the UI source hotfix into Kevin's existing Pi package after comparing
+the installed file against source. The only additional difference was the
+previously tested optional local-port setting; its default remains 17072.
+Saved the old file under private/ui-fix-20260906/previous.ts. Installed SHA-256:
+a571e745733412f13711fb565aee97ef6289009e355d378440674d52bafc427c.
+An import/readback of the installed module returned http://127.0.0.1:17072/v1.
+No running production Pi process or proxy was restarted. The change applies to
+new or reloaded Pi sessions and is an unreleased local hotfix, not a new tag.
+Production bootstrap/deploy/onstart files remain unchanged. Budget drawdown
+at 03:59 UTC was $3.9742. The canonical test still has no inference result.
+
+At 04:04 UTC deploy handle 38737 also exited on the unchanged-status guard.
+Provider instance 50027040 remained loading with no port and the same completed
+layer message. There is no live deploy command now. The provider rental and its
+cleanup timer still exist; do not interpret the command timeout as proof that
+the underlying image pull is dead, and do not start a duplicate rental.
+
+### Image transfer evidence
+
+The unfiltered daemon-log request returned useful layer records; the earlier
+regex filter did not. The registry manifest was fetched and its SHA-256 matched
+the production image digest. It contains 14886529949 compressed bytes. At the
+offer's reported 127.1 Mbps, an entirely uncached transfer estimates 937 seconds,
+before startup or prefill. This is an estimate at that rate, not a strict lower
+bound or proof of remaining bytes. Cached and partly downloaded layers matter.
+Added benchmarks/image_pull_report.py to report these facts without exposing
+raw log text; four tests pass, including ambiguity and invalid-rate handling.
+
+At 04:16 UTC provider status changed to another completed large layer. The
+underlying pull was therefore still progressing after the observer timeouts.
+Resumed official deploy on the SAME instance, with a test-only 600-second
+unchanged-status window and three-second polling. No production default was
+changed. This run has already failed the 180-second cold-start gate; the longer
+observation only aims to reach the runtime/wake tests. The original cleanup
+timer and account guard remain active. Manifest and logs are private on Kevin
+under canonical-rental. No inference has yet run on this instance.
+
+Current deploy handle is 77360, confirmed live. Private Pi RPC handle 92732 and
+pi-lifecycle-50027040-proxy remain prepared for the post-bootstrap check. Account
+drawdown at the last read was $4.0496. Do not create any additional rental while
+50027040 exists, and do not treat the transfer observer's extended window as a
+passed cold-start gate.
